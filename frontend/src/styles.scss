@@ -51,6 +51,7 @@
   --scope-bg: #183247;
   --scope-color: #9dc6d9;
   --scope-border: #285072;
+  --org-scroll-bg: rgba(10, 20, 35, 0.4);
   --tree-line: #3d5a7d;
   --node-bg: #14243b;
   --node-border: #2e445f;
@@ -71,9 +72,9 @@
   --side: #ffffff;
   --panel: #ffffff;
   --panel2: #f1f5f9;
-  --line: #e2e8f0;
+  --line: #cbd5e1;
   --text: #0f172a;
-  --muted: #64748b;
+  --muted: #475569;
   --cyan: #0284c7;
   --blue: #2563eb;
   --green: #16a34a;
@@ -114,15 +115,16 @@
   --dialog-border: #e2e8f0;
   --kv-border: #f1f5f9;
   --chip-bg: #f1f5f9;
-  --chip-color: #334155;
-  --chip-border: #e2e8f0;
+  --chip-color: #1e293b;
+  --chip-border: #cbd5e1;
   --scope-bg: #f1f5f9;
   --scope-color: #0284c7;
   --scope-border: #cbd5e1;
-  --tree-line: #94a3b8;
+  --org-scroll-bg: #f8fafc;
+  --tree-line: #64748b;
   --node-bg: #ffffff;
   --node-border: #cbd5e1;
-  --node-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
+  --node-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
   --node-hover-bg: #f8fafc;
   --note-bg: #f0f9ff;
   --note-border: #bae6fd;
@@ -1009,19 +1011,20 @@ tr[data-id]:hover td, tr.clickable:hover td {
 
 .org-node .symbol {
   font-size: 16px;
-  color: #48c4d9;
+  color: var(--cyan);
   line-height: 1;
 }
 
 .org-node .symbol.symbol-human {
-  color: #60a5fa;
+  color: var(--blue);
   font-size: 17px;
 }
 
 .org-node .dept-badge {
   font-size: 9px;
-  color: #8da4be;
-  background: rgba(255, 255, 255, 0.06);
+  color: var(--muted);
+  background: var(--panel2);
+  border: 1px solid var(--line);
   padding: 2px 6px;
   border-radius: 4px;
   letter-spacing: 0.2px;
@@ -1034,14 +1037,14 @@ tr[data-id]:hover td, tr.clickable:hover td {
 .org-node .name {
   font-size: 13px;
   font-weight: 800;
-  color: #e9f1fb;
+  color: var(--text);
   line-height: 1.3;
   margin-bottom: 2px;
 }
 
 .org-node .role {
   font-size: 11px;
-  color: #9cb2c8;
+  color: var(--muted);
   margin-bottom: 6px;
   line-height: 1.25;
 }
@@ -1050,15 +1053,15 @@ tr[data-id]:hover td, tr.clickable:hover td {
   font-size: 10px;
   padding: 2px 7px;
   border-radius: 100px;
-  background: rgba(40, 65, 95, 0.6);
-  border: 1px solid #2d4563;
-  color: #a3c3e8;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  color: var(--text);
   white-space: nowrap;
 }
 
 .org-node .model {
   font-size: 10px;
-  color: #48c4d9;
+  color: var(--cyan);
   margin-top: 6px;
   display: flex;
   align-items: center;
@@ -1067,15 +1070,15 @@ tr[data-id]:hover td, tr.clickable:hover td {
 
 .org-node .model .dot {
   font-size: 8px;
-  color: #4ad19a;
+  color: var(--green);
 }
 
 .org-node .model.model-human {
-  color: #93c5fd;
+  color: var(--blue);
 }
 
 .org-node .model .dot-human {
-  color: #3b82f6;
+  color: var(--blue);
 }
 
 .empty {
@@ -1283,25 +1286,94 @@ tr[data-id]:hover td, tr.clickable:hover td {
     color: #d97706;
   }
 
+  /* Org Chart light theme high-contrast styling */
+  .org-scroll {
+    border: 1px solid #cbd5e1;
+    background: #f8fafc;
+    box-shadow: inset 0 2px 8px rgba(15, 23, 42, 0.04);
+  }
+
+  .org-node {
+    border: 1.5px solid #cbd5e1;
+    background: #ffffff;
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
+  }
+
+  .org-node:hover {
+    border-color: #0284c7;
+    background: #f8fafc;
+    box-shadow: 0 8px 24px rgba(2, 132, 199, 0.2);
+  }
+
   .org-node.node-human {
-    border-color: #3b82f6;
-    background: linear-gradient(160deg, #eff6ff 0%, #dbeafe 100%);
-    box-shadow: 0 4px 16px rgba(59, 130, 246, 0.15);
+    border: 2px solid #2563eb;
+    background: linear-gradient(165deg, #eff6ff 0%, #ffffff 100%);
+    box-shadow: 0 4px 16px rgba(37, 99, 235, 0.18);
   }
   .org-node.node-human:hover {
-    border-color: #2563eb;
-    box-shadow: 0 8px 24px rgba(37, 99, 235, 0.22);
+    border-color: #1d4ed8;
+    box-shadow: 0 8px 26px rgba(29, 78, 216, 0.25);
   }
+
+  .org-node.node-manager {
+    border: 2px solid #0284c7;
+    background: linear-gradient(165deg, #f0f9ff 0%, #ffffff 100%);
+    box-shadow: 0 4px 14px rgba(2, 132, 199, 0.15);
+  }
+  .org-node.node-manager:hover {
+    border-color: #0369a1;
+    box-shadow: 0 8px 24px rgba(3, 105, 161, 0.22);
+  }
+
+  .org-node .name {
+    color: #0f172a;
+    font-weight: 800;
+  }
+
+  .org-node .role {
+    color: #475569;
+    font-weight: 600;
+  }
+
+  .org-node .symbol {
+    color: #0284c7;
+    font-weight: 700;
+  }
+
+  .org-node .symbol.symbol-human {
+    color: #2563eb;
+    font-weight: 800;
+  }
+
   .org-node .dept-badge {
     background: #f1f5f9;
-    color: #475569;
+    color: #334155;
+    border: 1px solid #cbd5e1;
+    font-weight: 600;
   }
+
   .org-node .node-chip {
     background: #f1f5f9;
-    border-color: #cbd5e1;
-    color: #334155;
+    border: 1px solid #cbd5e1;
+    color: #0f172a;
+    font-weight: 600;
   }
+
+  .org-node .model {
+    color: #0284c7;
+    font-weight: 600;
+  }
+
+  .org-node .model .dot {
+    color: #16a34a;
+  }
+
   .org-node .model.model-human {
+    color: #2563eb;
+    font-weight: 600;
+  }
+
+  .org-node .model .dot-human {
     color: #2563eb;
   }
 
