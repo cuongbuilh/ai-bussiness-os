@@ -1,0 +1,990 @@
+openapi: 3.1.0
+info:
+  title: AI Business OS Control Plane API
+  version: 1.1.0-draft
+  description: 'Task-driven MVP + P1 contracts; Goal-driven interfaces are described separately as future
+    design. AuthZ, quota, approval and idempotency are server-enforced. Starter: not a production-complete
+    API.'
+servers:
+- url: /api/v1
+security:
+- bearerAuth: []
+paths:
+  /organization/org-chart:
+    get:
+      operationId: getOrgChart
+      summary: Get visible organizational reporting tree
+      parameters:
+      - name: asOf
+        in: query
+        schema:
+          type: string
+          format: date-time
+      responses:
+        '200':
+          description: Tree visible to caller
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrgChart'
+  /employees:
+    get:
+      operationId: listEmployees
+      summary: Filter employees by department/team/title/status
+      responses:
+        '200':
+          description: Paginated employees
+    post:
+      operationId: createEmployee
+      summary: Create AI or human employee
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmployeeCreate'
+      responses:
+        '201':
+          description: Created
+  /employees/{employeeId}:
+    get:
+      operationId: getEmployeeDetail
+      parameters:
+      - $ref: '#/components/parameters/employeeId'
+      responses:
+        '200':
+          description: Identity
+          reporting: null
+          role: null
+          model: null
+          grants: null
+          active tasks: null
+          KPI summary: null
+  /employees/{employeeId}/capabilities:
+    get:
+      operationId: getEffectiveCapabilities
+      parameters:
+      - $ref: '#/components/parameters/employeeId'
+      responses:
+        '200':
+          description: Position and employee MCP/tools/skills
+          effective grants and denies: null
+  /projects:
+    get:
+      operationId: listProjects
+      parameters:
+      - $ref: '#/components/parameters/scopeType'
+      - $ref: '#/components/parameters/scopeId'
+      responses:
+        '200':
+          description: Project portfolio
+          scoped and paginated: null
+    post:
+      operationId: createProject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectCreate'
+      responses:
+        '201':
+          description: Created
+  /projects/{projectId}:
+    get:
+      operationId: getProjectDetail
+      parameters:
+      - $ref: '#/components/parameters/projectId'
+      responses:
+        '200':
+          description: Milestones
+          tasks: null
+          contributors: null
+          budget: null
+          performance and risks: null
+  /tasks:
+    get:
+      operationId: listTasks
+      parameters:
+      - $ref: '#/components/parameters/scopeType'
+      - $ref: '#/components/parameters/scopeId'
+      - name: status
+        in: query
+        schema:
+          type: string
+      - name: cursor
+        in: query
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Paginated distinct tasks matching caller scope
+    post:
+      operationId: createTask
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskCreate'
+      responses:
+        '201':
+          description: Created
+        '400':
+          description: Validation failed
+        '403':
+          description: Forbidden
+  /tasks/{taskId}:
+    get:
+      operationId: getTaskDetail
+      parameters:
+      - $ref: '#/components/parameters/taskId'
+      responses:
+        '200':
+          description: Task with participants
+          dependencies: null
+          runs: null
+          costs and acceptance: null
+    patch:
+      operationId: updateTask
+      parameters:
+      - $ref: '#/components/parameters/taskId'
+      - name: If-Match
+        in: header
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Updated
+        '409':
+          description: Version conflict
+  /tasks/{taskId}/assign:
+    post:
+      operationId: assignTask
+      parameters:
+      - $ref: '#/components/parameters/taskId'
+      - $ref: '#/components/parameters/idempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskAssignment'
+      responses:
+        '200':
+          description: Assignment created
+          outbox scheduled: null
+  /tasks/{taskId}/accept:
+    post:
+      operationId: acceptTask
+      parameters:
+      - $ref: '#/components/parameters/taskId'
+      - $ref: '#/components/parameters/idempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                comment:
+                  type: string
+                evidenceIds:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+      responses:
+        '200':
+          description: Accepted by authorized actor
+  /tasks/{taskId}/executions:
+    get:
+      operationId: getTaskExecutions
+      parameters:
+      - $ref: '#/components/parameters/taskId'
+      responses:
+        '200':
+          description: Runs
+          model versions: null
+          tool calls: null
+          steps and costs: null
+  /boards/summary:
+    get:
+      operationId: getBoardSummary
+      parameters:
+      - $ref: '#/components/parameters/scopeType'
+      - $ref: '#/components/parameters/scopeId'
+      responses:
+        '200':
+          description: Scoped cards and WIP
+          spend: null
+          blockers: null
+          overdue: null
+          acceptance: null
+          lastUpdated: null
+  /boards/stream:
+    get:
+      operationId: streamBoardUpdates
+      summary: SSE feed; only authorized events, event cursor supports reconnect
+      responses:
+        '200':
+          description: text/event-stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+  /approvals/{approvalId}/decide:
+    post:
+      operationId: decideApproval
+      parameters:
+      - $ref: '#/components/parameters/approvalId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - decision
+              properties:
+                decision:
+                  type: string
+                  enum:
+                  - APPROVE
+                  - REJECT
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Decision recorded with actor/audit
+  /models/change-proposals:
+    post:
+      operationId: proposeModelChange
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - employeeId
+              - candidateModelVersionId
+              - evaluationRunId
+              properties:
+                employeeId:
+                  type: string
+                  format: uuid
+                candidateModelVersionId:
+                  type: string
+                  format: uuid
+                evaluationRunId:
+                  type: string
+                  format: uuid
+      responses:
+        '201':
+          description: Approval requested
+          not immediately switched: null
+  /hr/change-proposals:
+    get:
+      operationId: listOrganizationChangeProposals
+      summary: Authorized HR/organization proposals
+      x-release-stage: P1
+      responses:
+        '200':
+          description: Processed within authorized scope
+        '403':
+          description: Forbidden
+        '409':
+          description: Policy/state conflict
+    post:
+      operationId: createOrganizationChangeProposal
+      summary: AI Manager can propose; human approval required before applying
+      x-release-stage: P1
+      parameters:
+      - $ref: '#/components/parameters/idempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrganizationChangeProposalCreate'
+      responses:
+        '201':
+          description: Submitted; not yet applied
+        '403':
+          description: Forbidden
+        '409':
+          description: Policy conflict
+  /triggers:
+    get:
+      operationId: listAutomationTriggers
+      summary: Triggers visible to caller; owner/scope enforced
+      x-release-stage: P1
+      responses:
+        '200':
+          description: Processed within authorized scope
+        '403':
+          description: Forbidden
+        '409':
+          description: Policy/state conflict
+    post:
+      operationId: registerAutomationTrigger
+      summary: Create bounded cron/event trigger; enabled only when policy permits
+      x-release-stage: P1
+      parameters:
+      - $ref: '#/components/parameters/idempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TriggerCreate'
+      responses:
+        '201':
+          description: Created; may remain disabled
+        '403':
+          description: Forbidden
+        '409':
+          description: Requires sensitive approval
+  /triggers/{triggerId}/dry-run:
+    post:
+      operationId: dryRunAutomationTrigger
+      summary: Preview work and budget; no work side effects
+      x-release-stage: P1
+      parameters:
+      - $ref: '#/components/parameters/triggerId'
+      responses:
+        '200':
+          description: Processed within authorized scope
+        '403':
+          description: Forbidden
+        '409':
+          description: Policy/state conflict
+  /triggers/{triggerId}/runs:
+    get:
+      operationId: listTriggerOccurrences
+      summary: Deduplicated occurrence audit and linked task IDs
+      x-release-stage: P1
+      parameters:
+      - $ref: '#/components/parameters/triggerId'
+      responses:
+        '200':
+          description: Processed within authorized scope
+        '403':
+          description: Forbidden
+        '409':
+          description: Policy/state conflict
+  /task-proposals:
+    get:
+      operationId: listTaskProposals
+      summary: Authorized candidate tasks
+      x-release-stage: P1
+      responses:
+        '200':
+          description: Processed within authorized scope
+        '403':
+          description: Forbidden
+        '409':
+          description: Policy/state conflict
+    post:
+      operationId: createTaskProposal
+      summary: Propose out-of-scope work; not automatically materialized
+      x-release-stage: P1
+      parameters:
+      - $ref: '#/components/parameters/idempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskProposalCreate'
+      responses:
+        '201':
+          description: Proposal created
+        '403':
+          description: Forbidden
+        '409':
+          description: Policy conflict
+  /memory/items:
+    get:
+      operationId: listVisibleMemoryItems
+      summary: Filtered, authorized scope and verified status
+      x-release-stage: P1
+      parameters:
+      - name: scopeType
+        in: query
+        required: true
+        schema:
+          type: string
+          enum:
+          - EMPLOYEE
+          - TEAM
+          - DEPARTMENT
+          - PROJECT
+          - ORGANIZATION
+      - name: scopeId
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Processed within authorized scope
+        '403':
+          description: Forbidden
+        '409':
+          description: Policy/state conflict
+    post:
+      operationId: createMemoryCandidate
+      summary: Create classified candidate memory, no trust promotion
+      x-release-stage: P1
+      parameters:
+      - $ref: '#/components/parameters/idempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemoryItemCreate'
+      responses:
+        '201':
+          description: Candidate created
+        '403':
+          description: Forbidden
+  /memory/items/{memoryId}/verify:
+    post:
+      operationId: decideMemoryVerification
+      summary: Independent verification or revocation; audit
+      x-release-stage: P1
+      parameters:
+      - $ref: '#/components/parameters/memoryId'
+      - $ref: '#/components/parameters/idempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemoryVerification'
+      responses:
+        '200':
+          description: Processed within authorized scope
+        '403':
+          description: Forbidden
+        '409':
+          description: Policy/state conflict
+  /employees/{employeeId}/memory-access:
+    get:
+      operationId: getEmployeeMemoryPolicy
+      summary: Show effective namespaces/grants without protected contents
+      x-release-stage: P0
+      parameters:
+      - $ref: '#/components/parameters/employeeId'
+      responses:
+        '200':
+          description: Processed within authorized scope
+        '403':
+          description: Forbidden
+        '409':
+          description: Policy/state conflict
+  /budgets/{budgetId}/usage:
+    get:
+      operationId: getBudgetUsage
+      summary: spent/reserved/remaining/percent, flags and asOf
+      x-release-stage: P0
+      parameters:
+      - $ref: '#/components/parameters/budgetId'
+      responses:
+        '200':
+          description: Processed within authorized scope
+        '403':
+          description: Forbidden
+        '409':
+          description: Policy/state conflict
+  /budgets/{budgetId}/top-up-requests:
+    post:
+      operationId: requestBudgetTopUp
+      summary: AI requests, human approves, separate revalidation on apply
+      x-release-stage: P0
+      parameters:
+      - $ref: '#/components/parameters/budgetId'
+      - $ref: '#/components/parameters/idempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopUpRequestCreate'
+      responses:
+        '201':
+          description: Request pending; effective cap unchanged
+        '403':
+          description: Forbidden
+        '409':
+          description: Policy conflict
+  /optimization/proposals:
+    get:
+      operationId: listOptimizationProposals
+      summary: Evidence-backed change proposals
+      x-release-stage: P1
+      responses:
+        '200':
+          description: Processed within authorized scope
+        '403':
+          description: Forbidden
+        '409':
+          description: Policy/state conflict
+    post:
+      operationId: createOptimizationProposal
+      summary: Prompt/skill/model/provider/tool policy proposal requires impact review
+      x-release-stage: P1
+      parameters:
+      - $ref: '#/components/parameters/idempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OptimizationProposalCreate'
+      responses:
+        '201':
+          description: Proposal created; effective config unchanged
+        '403':
+          description: Forbidden
+        '409':
+          description: Conflict
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    employeeId:
+      name: employeeId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    projectId:
+      name: projectId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    taskId:
+      name: taskId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    approvalId:
+      name: approvalId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    scopeType:
+      name: scopeType
+      in: query
+      required: false
+      schema:
+        type: string
+        enum:
+        - COMPANY
+        - DEPARTMENT
+        - TEAM
+        - PROJECT
+        - EMPLOYEE
+        - MANAGER
+        - POSITION
+    scopeId:
+      name: scopeId
+      in: query
+      required: false
+      schema:
+        type: string
+        format: uuid
+    idempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 8
+    triggerId:
+      name: triggerId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    memoryId:
+      name: memoryId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    budgetId:
+      name: budgetId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  schemas:
+    EmployeeCreate:
+      type: object
+      required:
+      - displayName
+      - kind
+      - positionId
+      properties:
+        displayName:
+          type: string
+          minLength: 1
+        kind:
+          type: string
+          enum:
+          - HUMAN
+          - AI
+        positionId:
+          type: string
+          format: uuid
+        departmentId:
+          type: string
+          format: uuid
+        managerEmployeeId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+    OrgChart:
+      type: object
+      required:
+      - nodes
+      - edges
+      properties:
+        nodes:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        edges:
+          type: array
+          items:
+            type: object
+            required:
+            - employeeId
+            - managerEmployeeId
+            properties:
+              employeeId:
+                type: string
+                format: uuid
+              managerEmployeeId:
+                type: string
+                format: uuid
+    ProjectCreate:
+      type: object
+      required:
+      - code
+      - name
+      - accountableOwnerId
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        accountableOwnerId:
+          type: string
+          format: uuid
+        description:
+          type: string
+        dueAt:
+          type: string
+          format: date-time
+    TaskCreate:
+      type: object
+      required:
+      - title
+      - accountableOwnerId
+      - acceptanceCriteria
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        projectId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        accountableOwnerId:
+          type: string
+          format: uuid
+        acceptanceCriteria:
+          type: string
+        dueAt:
+          type: string
+          format: date-time
+        priority:
+          type: string
+          enum:
+          - LOW
+          - MEDIUM
+          - HIGH
+          - CRITICAL
+    TaskAssignment:
+      type: object
+      required:
+      - accountableOwnerId
+      properties:
+        accountableOwnerId:
+          type: string
+          format: uuid
+        executingEmployeeId:
+          type: string
+          format: uuid
+        budgetCapUsd:
+          type: number
+          minimum: 0
+        requireAcceptance:
+          type: boolean
+          default: true
+    OrganizationChangeProposalCreate:
+      type: object
+      required:
+      - changeType
+      - reason
+      - proposedChange
+      properties:
+        changeType:
+          type: string
+          enum:
+          - HIRE_AI
+          - ASSIGN_POSITION
+          - CHANGE_MANAGER
+          - REORGANIZE
+        reason:
+          type: string
+          minLength: 5
+        proposedChange:
+          type: object
+          additionalProperties: true
+        estimatedMonthlyCostUsd:
+          type: number
+          minimum: 0
+        evidenceArtifactIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+      additionalProperties: false
+    TriggerCreate:
+      type: object
+      required:
+      - name
+      - kind
+      - mode
+      - ownerEmployeeId
+      - maxTasksPerWindow
+      - maxUsdPerWindow
+      - expiresAt
+      properties:
+        name:
+          type: string
+          minLength: 1
+        kind:
+          type: string
+          enum:
+          - SCHEDULE
+          - EVENT
+        mode:
+          type: string
+          enum:
+          - PROPOSE_ONLY
+          - AUTO_CREATE_IN_POLICY
+        ownerEmployeeId:
+          type: string
+          format: uuid
+        scheduleCron:
+          type: string
+        timezone:
+          type: string
+          default: Asia/Ho_Chi_Minh
+        eventTypeAllowlist:
+          type: array
+          items:
+            type: string
+        maxTasksPerWindow:
+          type: integer
+          minimum: 1
+        maxUsdPerWindow:
+          type: number
+          minimum: 0
+        expiresAt:
+          type: string
+          format: date-time
+        enabled:
+          type: boolean
+          default: false
+        taskTemplate:
+          type: object
+          additionalProperties: true
+      additionalProperties: false
+    TaskProposalCreate:
+      type: object
+      required:
+      - title
+      - acceptanceCriteria
+      - reason
+      properties:
+        title:
+          type: string
+          minLength: 1
+        acceptanceCriteria:
+          type: string
+          minLength: 1
+        reason:
+          type: string
+          minLength: 1
+        projectId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        proposedOwnerId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        parentTaskId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        estimatedUsd:
+          type: number
+          minimum: 0
+      additionalProperties: false
+    MemoryItemCreate:
+      type: object
+      required:
+      - scopeType
+      - scopeId
+      - classification
+      - contentRef
+      - provenance
+      properties:
+        scopeType:
+          type: string
+          enum:
+          - EMPLOYEE
+          - TEAM
+          - DEPARTMENT
+          - PROJECT
+          - ORGANIZATION
+        scopeId:
+          type: string
+          format: uuid
+        classification:
+          type: string
+          enum:
+          - PUBLIC_INTERNAL
+          - INTERNAL
+          - CONFIDENTIAL
+          - RESTRICTED
+        contentRef:
+          type: string
+          minLength: 1
+        provenance:
+          type: object
+          additionalProperties: true
+        expiresAt:
+          type: string
+          format: date-time
+      additionalProperties: false
+    MemoryVerification:
+      type: object
+      required:
+      - decision
+      - reason
+      properties:
+        decision:
+          type: string
+          enum:
+          - VERIFY
+          - REJECT
+          - REVOKE
+        reason:
+          type: string
+          minLength: 1
+      additionalProperties: false
+    TopUpRequestCreate:
+      type: object
+      required:
+      - incrementUsd
+      - reason
+      properties:
+        incrementUsd:
+          type: number
+          exclusiveMinimum: 0
+        reason:
+          type: string
+          minLength: 5
+        relatedTaskId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        expectedBenefit:
+          type: string
+      additionalProperties: false
+    OptimizationProposalCreate:
+      type: object
+      required:
+      - changeType
+      - subjectEmployeeId
+      - baselineVersion
+      - candidateVersion
+      - evaluationRef
+      - reason
+      properties:
+        changeType:
+          type: string
+          enum:
+          - PROMPT
+          - SKILL
+          - MODEL
+          - PROVIDER
+          - TOOL_POLICY
+        subjectEmployeeId:
+          type: string
+          format: uuid
+        baselineVersion:
+          type: string
+        candidateVersion:
+          type: string
+        evaluationRef:
+          type: string
+          minLength: 1
+        reason:
+          type: string
+        rollbackVersion:
+          type: string
+        estimatedCostDeltaUsd:
+          type: number
+      additionalProperties: false
