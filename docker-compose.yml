@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: abos-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-abos}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-abos_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-abos_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-abos} -d ${POSTGRES_DB:-abos_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - abos-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: abos-backend
+    environment:
+      PORT: "8080"
+      DATABASE_URL: "postgres://${POSTGRES_USER:-abos}:${POSTGRES_PASSWORD:-abos_secret}@postgres:5432/${POSTGRES_DB:-abos_db}?sslmode=disable"
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - abos-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: abos-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - abos-network
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  abos-network:
+    driver: bridge

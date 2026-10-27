@@ -1,0 +1,848 @@
+<div class="app">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="mark">A</div>
+      AI Business OS
+    </div>
+    <div class="label-small">Command Center</div>
+    <nav>
+      <button class="nav" [class.active]="activePage === 'overview'" (click)="setPage('overview')">
+        <span>▦</span> Tổng quan
+      </button>
+      <button class="nav" [class.active]="activePage === 'organization'" (click)="setPage('organization')">
+        <span>♧</span> Sơ đồ tổ chức
+      </button>
+      <button class="nav" [class.active]="activePage === 'board'" (click)="setPage('board')">
+        <span>▥</span> Work Board
+      </button>
+      <button class="nav" [class.active]="activePage === 'projects'" (click)="setPage('projects')">
+        <span>▤</span> Dự án
+      </button>
+      <button class="nav" [class.active]="activePage === 'employees'" (click)="setPage('employees')">
+        <span>♙</span> Nhân viên AI
+      </button>
+      <button class="nav" [class.active]="activePage === 'capabilities'" (click)="setPage('capabilities')">
+        <span>◇</span> Models & Tools
+      </button>
+      <button class="nav" [class.active]="activePage === 'approvals'" (click)="setPage('approvals')">
+        <span>✓</span> Phê duyệt ({{ getPendingApprovalsCount() }})
+      </button>
+    </nav>
+    <div class="sidebar-bottom">
+      <div>● <span style="color:var(--green)">Live Control Plane</span></div>
+      <div class="tiny muted" style="margin-top:3px">Golang + Angular + Docker</div>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main">
+    <!-- Topbar -->
+    <header class="topbar">
+      <div class="breadcrumbs">
+        <b>AI Business OS</b> &nbsp; / &nbsp;
+        <span *ngIf="activePage === 'overview'">Tổng quan</span>
+        <span *ngIf="activePage === 'organization'">Sơ đồ tổ chức</span>
+        <span *ngIf="activePage === 'board'">Unified Work Board</span>
+        <span *ngIf="activePage === 'projects'">Danh mục dự án</span>
+        <span *ngIf="activePage === 'employees'">Lực lượng nhân sự AI</span>
+        <span *ngIf="activePage === 'capabilities'">Models & MCP Tools</span>
+        <span *ngIf="activePage === 'approvals'">Hộp thư phê duyệt</span>
+      </div>
+      <div class="toolbar">
+        <span class="scope-pill">◉ Enterprise Organization</span>
+        <button class="btn mini primary" (click)="openCreateTaskModal()">＋ Giao việc</button>
+        <div class="avatar" title="Founder / CEO">FC</div>
+      </div>
+    </header>
+
+    <div class="shell">
+      <!-- 1. OVERVIEW PAGE -->
+      <section *ngIf="activePage === 'overview'">
+        <div class="heading">
+          <div>
+            <div class="eyebrow">AI BUSINESS OPERATING SYSTEM</div>
+            <h1>Điều hành toàn công ty</h1>
+            <div class="section-sub">Toàn cảnh lực lượng nhân sự AI, dự án trọng điểm, công việc và ngân sách thời gian thực.</div>
+          </div>
+          <div class="actions">
+            <button class="btn primary" (click)="openCreateTaskModal()">＋ Giao việc</button>
+          </div>
+        </div>
+
+        <div class="grid kpis">
+          <div class="card interactive" (click)="setPage('employees')">
+            <div class="kpi-label">Nhân viên AI đang hoạt động</div>
+            <div class="kpi-num">{{ getActiveAIEmployeesCount() }}</div>
+            <div class="kpi-foot">3 phòng ban · 5 team</div>
+          </div>
+          <div class="card interactive" (click)="setPage('projects')">
+            <div class="kpi-label">Dự án</div>
+            <div class="kpi-num">{{ projects.length }}</div>
+            <div class="kpi-foot">{{ boardSummary.projectsCount }} đang thực hiện</div>
+          </div>
+          <div class="card interactive" (click)="setPage('board')">
+            <div class="kpi-label">Tasks đang thực hiện</div>
+            <div class="kpi-num">{{ boardSummary.activeTasks }}</div>
+            <div class="kpi-foot">Tất cả phòng ban / team</div>
+          </div>
+          <div class="card interactive" (click)="setPage('approvals')">
+            <div class="kpi-label">Chờ phê duyệt</div>
+            <div class="kpi-num" style="color:var(--orange)">{{ getPendingApprovalsCount() }}</div>
+            <div class="kpi-foot">Yêu cầu rủi ro cao / model swap</div>
+          </div>
+        </div>
+
+        <div class="grid cols-2">
+          <!-- Projects Summary -->
+          <div class="card">
+            <div class="row">
+              <h2>Danh mục dự án</h2>
+              <button class="btn mini" (click)="setPage('projects')">Xem tất cả</button>
+            </div>
+            <div *ngFor="let p of projects" class="listline interactive" (click)="openProjectDetail(p.id)">
+              <div class="row">
+                <b>{{ p.name }}</b>
+                <span class="chip">{{ p.code }}</span>
+              </div>
+              <div class="muted small" style="margin-top:3px">
+                Chủ dự án: {{ p.ownerName }} · Ngân sách: ${{ p.spent.toFixed(2) }} / ${{ p.budget.toFixed(2) }}
+              </div>
+              <div class="progress" style="margin-top:10px">
+                <span [style.width.%]="(p.spent / (p.budget || 1)) * 100"></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Project & Task Health -->
+          <div class="card">
+            <div class="row">
+              <h2>Project & Task Health</h2>
+              <span class="chip">Live metrics</span>
+            </div>
+            <div class="barrow">
+              <span>Accepted</span>
+              <div class="progress"><span [style.width.%]="boardSummary.totalTasks ? (boardSummary.acceptedTasks / boardSummary.totalTasks * 100) : 0"></span></div>
+              <b>{{ boardSummary.acceptedTasks }}</b>
+            </div>
+            <div class="barrow">
+              <span>In progress</span>
+              <div class="progress"><span [style.width.%]="boardSummary.totalTasks ? (boardSummary.activeTasks / boardSummary.totalTasks * 100) : 0"></span></div>
+              <b>{{ boardSummary.activeTasks }}</b>
+            </div>
+            <div class="barrow">
+              <span>Blocked</span>
+              <div class="progress"><span style="background:var(--red)" [style.width.%]="boardSummary.totalTasks ? (boardSummary.blockedTasks / boardSummary.totalTasks * 100) : 0"></span></div>
+              <b>{{ boardSummary.blockedTasks }}</b>
+            </div>
+            <div class="barrow">
+              <span>Backlog</span>
+              <div class="progress"><span [style.width.%]="boardSummary.totalTasks ? (boardSummary.backlogTasks / boardSummary.totalTasks * 100) : 0"></span></div>
+              <b>{{ boardSummary.backlogTasks }}</b>
+            </div>
+            <div class="note" style="margin-top:20px">
+              Company → Department / Team → Project / Employee → Task → Execution. Mỗi task gốc được đếm chính xác một lần ở phạm vi toàn công ty.
+            </div>
+            <div class="row" style="margin-top:14px">
+              <span class="muted">Tổng chi phí trên các tasks:</span>
+              <b>${{ boardSummary.totalSpentUsd.toFixed(2) }}</b>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid cols-2" style="margin-top:18px">
+          <!-- Critical Tasks -->
+          <div class="card">
+            <div class="row">
+              <h2>Việc cần chú ý</h2>
+              <button class="btn mini" (click)="setPage('board')">Mở Work Board</button>
+            </div>
+            <div *ngFor="let t of tasks.slice(0, 5)" class="listline interactive row" (click)="openTaskDetail(t.id)">
+              <div>
+                <b>{{ t.title }}</b>
+                <div class="small muted">{{ t.id }} · {{ t.ownerName }} · ${{ t.cost.toFixed(2) }}</div>
+              </div>
+              <span class="status" [ngClass]="t.status">{{ t.status }}</span>
+            </div>
+          </div>
+
+          <!-- AI Workforce Preview -->
+          <div class="card">
+            <div class="row">
+              <h2>Lực lượng AI tiêu biểu</h2>
+              <button class="btn mini" (click)="setPage('organization')">Sơ đồ tổ chức</button>
+            </div>
+            <div *ngFor="let e of employees.slice(0, 5)" class="listline interactive row" (click)="openEmployeeDetail(e.id)">
+              <div>
+                <b>{{ e.name }}</b>
+                <div class="small muted">{{ e.title }} · {{ e.provider }}</div>
+              </div>
+              <span class="chip">{{ e.kpi }}% KPI</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. ORGANIZATION CHART PAGE -->
+      <section *ngIf="activePage === 'organization'">
+        <div class="heading">
+          <div>
+            <div class="eyebrow">HIERARCHY & DIRECT REPORTING</div>
+            <h1>Sơ đồ tổ chức</h1>
+            <div class="section-sub">Quan hệ báo cáo trực tiếp 1-1 (1 direct manager / employee). Click vào bất kỳ nhân sự nào để xem thông tin chi tiết.</div>
+          </div>
+          <div class="actions">
+            <button class="btn primary" (click)="openCreateTaskModal()">＋ Giao việc</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="row">
+            <h2>Cây phân cấp doanh nghiệp</h2>
+            <span class="chip">Single Tenant Internal</span>
+          </div>
+
+          <div class="org-scroll">
+            <div class="tree" *ngIf="orgTree">
+              <ul>
+                <ng-template #renderNode let-node>
+                  <li>
+                    <div class="org-node" (click)="openEmployeeDetail(node.id)">
+                      <div class="symbol">{{ node.kind === 'AI' ? '◈' : '◉' }}</div>
+                      <div class="name">{{ node.name }}</div>
+                      <div class="role">{{ node.title }}</div>
+                      <div class="chip" style="margin-top:4px">{{ node.role }}</div>
+                      <div class="model">{{ node.model }}</div>
+                    </div>
+                    <ul *ngIf="node.children && node.children.length > 0">
+                      <ng-container *ngFor="let child of node.children">
+                        <ng-container *ngTemplateOutlet="renderNode; context: { $implicit: child }"></ng-container>
+                      </ng-container>
+                    </ul>
+                  </li>
+                </ng-template>
+                <ng-container *ngTemplateOutlet="renderNode; context: { $implicit: orgTree }"></ng-container>
+              </ul>
+            </div>
+          </div>
+
+          <div class="note">
+            Đường nối thể hiện quan hệ báo cáo trực tiếp. Thành viên dự án, cross-department team và cộng tác chéo không thay đổi quan hệ quản lý trực tiếp.
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. UNIFIED WORK BOARD PAGE -->
+      <section *ngIf="activePage === 'board'">
+        <div class="heading">
+          <div>
+            <div class="eyebrow">WORK MANAGEMENT</div>
+            <h1>Unified Work Board</h1>
+            <div class="section-sub">Xem task theo toàn công ty, phòng ban, team, dự án, từng nhân viên, quản lý hoặc vai trò (Role).</div>
+          </div>
+          <div class="actions">
+            <button class="btn primary" (click)="openCreateTaskModal()">＋ Giao việc</button>
+          </div>
+        </div>
+
+        <!-- Filter Toolbar -->
+        <div class="toolbar-filters">
+          <!-- 7-Scope Selector -->
+          <select [(ngModel)]="scope" (change)="onScopeChange()" class="select">
+            <option value="company:all">Toàn công ty</option>
+            <optgroup label="Phòng ban">
+              <option *ngFor="let d of departments" [value]="'department:' + d.id">Phòng · {{ d.name }}</option>
+            </optgroup>
+            <optgroup label="Team">
+              <option *ngFor="let t of teams" [value]="'team:' + t.id">Team · {{ t.name }}</option>
+            </optgroup>
+            <optgroup label="Dự án">
+              <option *ngFor="let p of projects" [value]="'project:' + p.id">Dự án · {{ p.code }}</option>
+            </optgroup>
+            <optgroup label="Nhân viên">
+              <option *ngFor="let e of employees" [value]="'employee:' + e.id">Nhân viên · {{ e.name }}</option>
+            </optgroup>
+            <optgroup label="Quản lý">
+              <option value="manager:h1">Quản lý · Founder</option>
+              <option value="manager:m1">Quản lý · Maya Manager</option>
+              <option value="manager:m2">Quản lý · Theo CTO</option>
+            </optgroup>
+          </select>
+
+          <!-- Filter Project -->
+          <select [(ngModel)]="filterProject" (change)="loadTasks()" class="select">
+            <option value="">Tất cả dự án</option>
+            <option *ngFor="let p of projects" [value]="p.id">{{ p.code }}</option>
+          </select>
+
+          <!-- Filter Owner -->
+          <select [(ngModel)]="filterOwner" (change)="loadTasks()" class="select">
+            <option value="">Mọi nhân viên</option>
+            <option *ngFor="let e of employees" [value]="e.id">{{ e.name }}</option>
+          </select>
+
+          <!-- Filter Status -->
+          <select [(ngModel)]="filterStatus" (change)="loadTasks()" class="select">
+            <option value="">Mọi trạng thái</option>
+            <option *ngFor="let col of kanbanColumns" [value]="col.code">{{ col.label }}</option>
+          </select>
+
+          <!-- Search query -->
+          <input [(ngModel)]="filterText" (input)="loadTasks()" class="input" style="width:200px" placeholder="Tìm kiếm task..." />
+
+          <button class="btn" (click)="resetFilters()">Xóa bộ lọc</button>
+        </div>
+
+        <!-- Scope metrics -->
+        <div class="grid kpis">
+          <div class="card">
+            <div class="kpi-label">Tasks hiển thị</div>
+            <div class="kpi-num">{{ tasks.length }}</div>
+            <div class="kpi-foot">Khớp bộ lọc hiện tại</div>
+          </div>
+          <div class="card">
+            <div class="kpi-label">Đang thực hiện / Review</div>
+            <div class="kpi-num">{{ boardSummary.activeTasks }}</div>
+            <div class="kpi-foot">Active executions</div>
+          </div>
+          <div class="card">
+            <div class="kpi-label">Bị chặn (Blocked)</div>
+            <div class="kpi-num" style="color:var(--red)">{{ boardSummary.blockedTasks }}</div>
+            <div class="kpi-foot">Chờ gỡ vướng / phê duyệt</div>
+          </div>
+          <div class="card">
+            <div class="kpi-label">Chi phí tích lũy</div>
+            <div class="kpi-num">${{ boardSummary.totalSpentUsd.toFixed(2) }}</div>
+            <div class="kpi-foot">Sổ cái kế toán</div>
+          </div>
+        </div>
+
+        <div class="row" style="margin-bottom:14px">
+          <div class="flex">
+            <span class="chip">Phạm vi: {{ scope }}</span>
+            <span class="muted small">{{ tasks.length }} tasks</span>
+          </div>
+          <div class="flex">
+            <button class="btn mini" [class.primary]="boardMode === 'kanban'" (click)="boardMode = 'kanban'">Kanban</button>
+            <button class="btn mini" [class.primary]="boardMode === 'table'" (click)="boardMode = 'table'">Table</button>
+          </div>
+        </div>
+
+        <!-- KANBAN VIEW -->
+        <div class="kanban" *ngIf="boardMode === 'kanban'">
+          <div *ngFor="let col of kanbanColumns" class="kanban-col">
+            <div class="kanban-title">
+              {{ col.label }}
+              <em>{{ getTasksByColumn(col.code).length }}</em>
+            </div>
+
+            <div *ngFor="let task of getTasksByColumn(col.code)" class="taskcard" (click)="openTaskDetail(task.id)">
+              <div class="row">
+                <span class="taskid">{{ task.id }}</span>
+                <span class="pillpriority">{{ task.priority }}</span>
+              </div>
+              <div class="tasktitle">{{ task.title }}</div>
+              <div class="taskmeta">
+                <span>{{ task.ownerName }}</span>
+                <span>{{ task.projectCode || 'Operations' }}</span>
+              </div>
+              <div class="taskmeta" style="margin-top:8px">
+                <span>${{ task.cost.toFixed(2) }}</span>
+                <span>Due {{ task.due }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TABLE VIEW -->
+        <div class="tablewrap" *ngIf="boardMode === 'table'">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Task</th>
+                <th>Dự án</th>
+                <th>Owner</th>
+                <th>Trạng thái</th>
+                <th>Ưu tiên</th>
+                <th>Hạn chót</th>
+                <th>Chi phí</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let t of tasks" class="clickable" (click)="openTaskDetail(t.id)">
+                <td class="font-mono">{{ t.id }}</td>
+                <td><b>{{ t.title }}</b></td>
+                <td>{{ t.projectCode || 'Operations' }}</td>
+                <td>{{ t.ownerName }}</td>
+                <td><span class="status" [ngClass]="t.status">{{ t.status }}</span></td>
+                <td>{{ t.priority }}</td>
+                <td>{{ t.due }}</td>
+                <td>${{ t.cost.toFixed(2) }}</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="empty" *ngIf="tasks.length === 0">Không có task nào trong phạm vi này.</div>
+        </div>
+      </section>
+
+      <!-- 4. PROJECTS PORTFOLIO PAGE -->
+      <section *ngIf="activePage === 'projects'">
+        <div class="heading">
+          <div>
+            <div class="eyebrow">PORTFOLIO & INITIATIVES</div>
+            <h1>Danh mục dự án</h1>
+            <div class="section-sub">Dự án liên phòng ban / team, KPI mục tiêu, ngân sách trần, mốc tiến độ (milestones) và task backlog.</div>
+          </div>
+          <div class="actions">
+            <button class="btn primary" (click)="openCreateTaskModal()">＋ Giao task trong dự án</button>
+          </div>
+        </div>
+
+        <div class="grid cols-3">
+          <div *ngFor="let p of projects" class="card project-card" (click)="openProjectDetail(p.id)">
+            <div class="row">
+              <span class="chip">{{ p.code }}</span>
+              <span class="chip">{{ p.status }}</span>
+            </div>
+            <h2 style="margin:16px 0 8px">{{ p.name }}</h2>
+            <p class="muted small">{{ p.description }}</p>
+            <div class="kv">
+              <span>Chủ dự án</span>
+              <b>{{ p.ownerName }}</b>
+            </div>
+            <div class="kv">
+              <span>Ngân sách / Đã dùng</span>
+              <b>${{ p.spent.toFixed(2) }} / ${{ p.budget.toFixed(2) }}</b>
+            </div>
+            <div class="kv">
+              <span>Hạn hoàn thành</span>
+              <b>{{ p.due }}</b>
+            </div>
+            <div class="progress" style="margin-top:16px">
+              <span [style.width.%]="(p.spent / (p.budget || 1)) * 100"></span>
+            </div>
+            <div class="flex" style="margin-top:12px">
+              <span *ngFor="let tm of p.teams" class="chip">{{ tm }}</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5. EMPLOYEES PAGE -->
+      <section *ngIf="activePage === 'employees'">
+        <div class="heading">
+          <div>
+            <div class="eyebrow">HUMAN & AI WORKFORCE</div>
+            <h1>Lực lượng nhân sự</h1>
+            <div class="section-sub">Quản lý danh sách nhân sự người thật và AI, vị trí, vai trò, người quản lý trực tiếp, mô hình LLM và hạn mức ngân sách.</div>
+          </div>
+          <div class="actions">
+            <button class="btn primary" (click)="openCreateTaskModal()">＋ Giao việc</button>
+          </div>
+        </div>
+
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Nhân viên</th>
+                <th>Vị trí / Role</th>
+                <th>Phòng ban</th>
+                <th>Quản lý trực tiếp</th>
+                <th>Mô hình / Provider</th>
+                <th>KPI Score</th>
+                <th>Chi tiêu (Spent)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let e of employees" class="clickable" (click)="openEmployeeDetail(e.id)">
+                <td>
+                  <b>{{ e.name }}</b>
+                  <div class="muted tiny">{{ e.kind }}</div>
+                </td>
+                <td>
+                  {{ e.title }}
+                  <div class="muted tiny">{{ e.role }}</div>
+                </td>
+                <td>{{ e.departmentName }}</td>
+                <td>{{ e.managerName }}</td>
+                <td>
+                  {{ e.model }}
+                  <div class="muted tiny">{{ e.provider }}</div>
+                </td>
+                <td><span class="chip">{{ e.kpi }}%</span></td>
+                <td>${{ e.spent.toFixed(2) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 6. CAPABILITIES & MCP TOOLS PAGE -->
+      <section *ngIf="activePage === 'capabilities'">
+        <div class="heading">
+          <div>
+            <div class="eyebrow">AI CAPABILITIES & TOOLS</div>
+            <h1>Models, MCP & Skills</h1>
+            <div class="section-sub">Danh mục nhà cung cấp mô hình (Provider), máy chủ giao thức MCP (Model Context Protocol) và chính sách phân quyền.</div>
+          </div>
+        </div>
+
+        <div class="grid cols-2">
+          <!-- Models -->
+          <div class="card">
+            <h2>Provider & Model Registry</h2>
+            <div *ngFor="let m of models" class="toolrow">
+              <div class="row">
+                <b>{{ m.modelId }} ({{ m.provider }})</b>
+                <span class="status active">Active</span>
+              </div>
+              <div class="small muted" style="margin-top:4px">Revision: {{ m.revision }}</div>
+              <div class="flex" style="margin-top:6px">
+                <span *ngFor="let f of m.features" class="chip">{{ f }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- MCP Servers -->
+          <div class="card">
+            <h2>MCP Server Catalogue</h2>
+            <div *ngFor="let mcp of mcpServers" class="toolrow row">
+              <div>
+                <b class="font-mono">{{ mcp.name }}</b>
+                <div class="muted tiny">{{ mcp.description }}</div>
+              </div>
+              <span class="chip">{{ mcp.risk }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Permission formula -->
+        <div class="card" style="margin-top:16px">
+          <h2>Ma trận phân quyền Tool Gateway</h2>
+          <div class="note">
+            <b>Effective Tool Access Formula:</b><br />
+            <code>Effective Access = Organization Allow ∩ Position Ceiling ∩ Agent Grant ∩ Task Scope ∩ Runtime/Model Capability ∩ Required Approvals</code>
+          </div>
+          <div class="muted small" style="margin-top:12px">
+            Skills là quy trình hướng dẫn có phiên bản (Instruction bundles), không tự động trao quyền thực thi công cụ. Mọi tool có rủi ro cao (R3) đều yêu cầu human approval trước khi thực thi.
+          </div>
+        </div>
+      </section>
+
+      <!-- 7. APPROVAL INBOX PAGE -->
+      <section *ngIf="activePage === 'approvals'">
+        <div class="heading">
+          <div>
+            <div class="eyebrow">GOVERNANCE & HUMAN-IN-THE-LOOP</div>
+            <h1>Hộp thư phê duyệt</h1>
+            <div class="section-sub">Mọi hành động nhạy cảm, thay đổi mô hình chính hoặc can thiệp ngân sách trần đều phải có phê duyệt từ người có thẩm quyền.</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="row">
+            <h2>Danh sách yêu cầu chờ duyệt</h2>
+            <span class="chip">{{ getPendingApprovalsCount() }} pending</span>
+          </div>
+
+          <div *ngFor="let a of approvals" class="listline">
+            <div class="row">
+              <div>
+                <b>{{ a.title }}</b>
+                <div class="small muted">
+                  {{ a.id }} · {{ a.type }} · Người yêu cầu: {{ a.requesterName }}
+                </div>
+              </div>
+              <div class="flex">
+                <span class="chip">Risk {{ a.risk }}</span>
+                <span *ngIf="a.status !== 'PENDING'" class="status" [ngClass]="a.status.toLowerCase()">{{ a.status }}</span>
+                <ng-container *ngIf="a.status === 'PENDING'">
+                  <button class="btn mini danger" (click)="decideApproval(a.id, 'REJECT')">Reject</button>
+                  <button class="btn mini primary" (click)="decideApproval(a.id, 'APPROVE')">Approve</button>
+                </ng-container>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- EMPLOYEE DETAIL DRAWER -->
+  <div class="modal-layer" *ngIf="selectedEmployee" (click)="closeOverlays()">
+    <aside class="drawer" (click)="$event.stopPropagation()">
+      <div class="row">
+        <span class="eyebrow">EMPLOYEE DETAIL · {{ selectedEmployee.id.toUpperCase() }}</span>
+        <button class="close" (click)="selectedEmployee = null">×</button>
+      </div>
+
+      <div class="profile-banner">
+        <div class="profile-ico">{{ selectedEmployee.kind === 'AI' ? '◈' : '◉' }}</div>
+        <div>
+          <div class="profile-title">{{ selectedEmployee.name }}</div>
+          <div class="muted small">{{ selectedEmployee.title }} · {{ selectedEmployee.role }}</div>
+          <div class="flex" style="margin-top:6px">
+            <span class="status active">Active</span>
+            <span class="chip">{{ selectedEmployee.kind }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="btn primary" (click)="openCreateTaskModal(selectedEmployee.id)">＋ Giao việc</button>
+      </div>
+
+      <div class="tabs">
+        <button class="tab" [class.selected]="selectedEmpTab === 'overview'" (click)="setEmpTab('overview')">Tổng quan</button>
+        <button class="tab" [class.selected]="selectedEmpTab === 'tasks'" (click)="setEmpTab('tasks')">Tasks ({{ getEmployeeTasks(selectedEmployee.id).length }})</button>
+        <button class="tab" [class.selected]="selectedEmpTab === 'tools'" (click)="setEmpTab('tools')">MCP / Skills</button>
+        <button class="tab" [class.selected]="selectedEmpTab === 'kpis'" (click)="setEmpTab('kpis')">Hiệu suất</button>
+      </div>
+
+      <!-- Tab 1: Overview -->
+      <div *ngIf="selectedEmpTab === 'overview'">
+        <div class="kv"><span>Employee Type</span><b>{{ selectedEmployee.kind }}</b></div>
+        <div class="kv"><span>Chức danh</span><b>{{ selectedEmployee.title }}</b></div>
+        <div class="kv"><span>Vai trò (Role)</span><b>{{ selectedEmployee.role }}</b></div>
+        <div class="kv"><span>Phòng ban</span><b>{{ selectedEmployee.departmentName }}</b></div>
+        <div class="kv"><span>Quản lý trực tiếp</span><b>{{ selectedEmployee.managerName }}</b></div>
+        <div class="kv"><span>Mô hình LLM</span><b>{{ selectedEmployee.model }} ({{ selectedEmployee.provider }})</b></div>
+        <div class="kv"><span>Hạn mức ngân sách tháng</span><b>${{ selectedEmployee.budget.toFixed(2) }}</b></div>
+        <div class="kv"><span>Đã tiêu thụ</span><b>${{ selectedEmployee.spent.toFixed(2) }}</b></div>
+        <div class="progress" style="margin-top:12px">
+          <span [style.width.%]="selectedEmployee.budget ? ((selectedEmployee.spent / selectedEmployee.budget) * 100) : 0"></span>
+        </div>
+      </div>
+
+      <!-- Tab 2: Tasks -->
+      <div *ngIf="selectedEmpTab === 'tasks'">
+        <div *ngFor="let t of getEmployeeTasks(selectedEmployee.id)" class="listline interactive row" (click)="openTaskDetail(t.id)">
+          <div>
+            <div class="font-mono">{{ t.id }}</div>
+            <b>{{ t.title }}</b>
+            <div class="small muted">${{ t.cost.toFixed(2) }} · Due {{ t.due }}</div>
+          </div>
+          <span class="status" [ngClass]="t.status">{{ t.status }}</span>
+        </div>
+        <div class="empty" *ngIf="getEmployeeTasks(selectedEmployee.id).length === 0">Chưa có task nào được giao.</div>
+      </div>
+
+      <!-- Tab 3: Tools & Skills -->
+      <div *ngIf="selectedEmpTab === 'tools'">
+        <h3>Position MCP Ceiling (Trần quyền chức vụ)</h3>
+        <div class="flex" *ngIf="selectedEmpCaps">
+          <span *ngFor="let m of selectedEmpCaps.positionCeilingMCPs" class="chip">{{ m }}</span>
+        </div>
+
+        <h3 style="margin-top:18px">MCP Servers được cấp cho Agent</h3>
+        <div class="flex">
+          <span *ngFor="let m of selectedEmployee.mcp" class="chip">{{ m }}</span>
+        </div>
+
+        <h3 style="margin-top:18px">Effective Entitlements (Trần ∩ Grant)</h3>
+        <div *ngIf="selectedEmpCaps">
+          <div *ngFor="let m of selectedEmpCaps.effectiveMCPs" class="kv">
+            <span class="font-mono">{{ m }}</span>
+            <b style="color:var(--green)">Eligible</b>
+          </div>
+        </div>
+
+        <h3 style="margin-top:18px">Agent Skills (Quy trình làm việc)</h3>
+        <div class="flex">
+          <span *ngFor="let s of selectedEmployee.skills" class="chip">{{ s }}</span>
+        </div>
+      </div>
+
+      <!-- Tab 4: KPIs -->
+      <div *ngIf="selectedEmpTab === 'kpis'">
+        <div class="grid cols-2">
+          <div class="card">
+            <div class="kpi-label">Điểm KPI đánh giá</div>
+            <div class="kpi-num">{{ selectedEmployee.kpi }}%</div>
+          </div>
+          <div class="card">
+            <div class="kpi-label">Tasks đã nghiệm thu</div>
+            <div class="kpi-num">{{ getEmployeeTasks(selectedEmployee.id).length }}</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- TASK DETAIL & RUN DRAWER -->
+  <div class="modal-layer" *ngIf="selectedTask" (click)="closeOverlays()">
+    <aside class="drawer" (click)="$event.stopPropagation()">
+      <div class="row">
+        <span class="eyebrow">TASK DETAIL · {{ selectedTask.id }}</span>
+        <button class="close" (click)="selectedTask = null">×</button>
+      </div>
+
+      <h2 style="font-size:22px;margin:12px 0 8px">{{ selectedTask.title }}</h2>
+      <div class="flex" style="margin-bottom:14px">
+        <span class="status" [ngClass]="selectedTask.status">{{ selectedTask.status }}</span>
+        <span class="chip">Priority {{ selectedTask.priority }}</span>
+        <span class="chip">{{ selectedTask.projectCode || 'Operations' }}</span>
+      </div>
+
+      <div class="kv"><span>Người chịu trách nhiệm</span><b>{{ selectedTask.ownerName }}</b></div>
+      <div class="kv"><span>Hạn hoàn thành</span><b>{{ selectedTask.due }}</b></div>
+      <div class="kv"><span>Chi phí đã dùng</span><b>${{ selectedTask.cost.toFixed(2) }}</b></div>
+      <div class="kv"><span>Tiêu chí nghiệm thu</span><b>{{ selectedTask.criteria }}</b></div>
+
+      <!-- Action buttons -->
+      <div class="actions" style="margin:20px 0">
+        <button class="btn primary" [disabled]="isExecutingTask" (click)="runTaskExecution(selectedTask.id)">
+          <span *ngIf="!isExecutingTask">▶ Chạy AI Execution</span>
+          <span *ngIf="isExecutingTask">Đang chạy...</span>
+        </button>
+
+        <button *ngIf="selectedTask.status !== 'accepted'" class="btn success" (click)="acceptTask(selectedTask.id)">
+          ✓ Nghiệm thu Task
+        </button>
+
+        <select [ngModel]="selectedTask.status" (ngModelChange)="updateTaskStatus(selectedTask, $event)" class="select">
+          <option *ngFor="let col of kanbanColumns" [value]="col.code">{{ col.label }}</option>
+        </select>
+      </div>
+
+      <!-- Execution Runs & Logs -->
+      <h3>Lịch sử thực thi (Executions: {{ taskExecutions.length }})</h3>
+      <div *ngFor="let ex of taskExecutions" class="card" style="margin-bottom:12px">
+        <div class="row">
+          <b>Attempt #{{ ex.attemptNo }}</b>
+          <span class="status" [ngClass]="ex.status.toLowerCase()">{{ ex.status }}</span>
+        </div>
+        <div class="small muted" style="margin-top:4px">
+          Agent: {{ ex.executingEmployeeName }} · ${{ ex.totalCostUsd.toFixed(2) }} · {{ ex.totalTokens }} tokens
+        </div>
+
+        <!-- Steps -->
+        <div *ngIf="ex.steps && ex.steps.length > 0" style="margin-top:10px">
+          <div *ngFor="let st of ex.steps" class="toolrow">
+            <div class="row">
+              <b>Bước {{ st.stepNo }}: {{ st.stepName }}</b>
+              <span class="chip">{{ st.toolName }}</span>
+            </div>
+            <div class="font-mono tiny" style="margin-top:4px">{{ st.input }}</div>
+          </div>
+        </div>
+
+        <!-- Terminal Logs -->
+        <div class="log-terminal" *ngIf="ex.logs && ex.logs.length > 0">
+          <div *ngFor="let log of ex.logs" class="log-line">{{ log }}</div>
+        </div>
+      </div>
+      <div class="empty" *ngIf="taskExecutions.length === 0">Chưa có lượt thực thi nào. Bấm 'Chạy AI Execution' để bắt đầu.</div>
+    </aside>
+  </div>
+
+  <!-- PROJECT DETAIL MODAL -->
+  <div class="modal-layer modal-center" *ngIf="selectedProject" (click)="closeOverlays()">
+    <div class="dialog" (click)="$event.stopPropagation()">
+      <div class="row">
+        <h2>{{ selectedProject.code }} · {{ selectedProject.name }}</h2>
+        <button class="close" (click)="selectedProject = null">×</button>
+      </div>
+
+      <p class="muted">{{ selectedProject.description }}</p>
+
+      <div class="grid cols-2" style="margin:16px 0">
+        <div class="card">
+          <div class="kpi-label">Ngân sách trần</div>
+          <div class="kpi-num">${{ selectedProject.budget.toFixed(2) }}</div>
+        </div>
+        <div class="card">
+          <div class="kpi-label">Chi phí đã dùng</div>
+          <div class="kpi-num">${{ selectedProject.spent.toFixed(2) }}</div>
+        </div>
+      </div>
+
+      <div class="kv"><span>Project Owner</span><b>{{ selectedProject.ownerName }}</b></div>
+      <div class="kv"><span>Deadline</span><b>{{ selectedProject.due }}</b></div>
+
+      <h3 style="margin-top:18px">Mốc tiến độ (Milestones)</h3>
+      <div *ngFor="let m of selectedProject.milestones" class="listline row">
+        <span>{{ m.name }}</span>
+        <b style="color:var(--green)" *ngIf="m.done">✓ Hoàn thành</b>
+        <b style="color:var(--orange)" *ngIf="!m.done">◌ Đang triển khai</b>
+      </div>
+
+      <div class="actions" style="margin-top:20px">
+        <button class="btn primary" (click)="openCreateTaskModal(undefined, selectedProject.id)">＋ Giao task trong dự án</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CREATE TASK MODAL -->
+  <div class="modal-layer modal-center" *ngIf="showCreateTaskModal" (click)="closeOverlays()">
+    <div class="dialog" (click)="$event.stopPropagation()">
+      <div class="row">
+        <h2>＋ Giao việc mới (Create Task)</h2>
+        <button class="close" (click)="showCreateTaskModal = false">×</button>
+      </div>
+
+      <form (submit)="$event.preventDefault(); submitCreateTask()" style="margin-top:16px">
+        <div class="formgroup">
+          <label>Tiêu đề công việc *</label>
+          <input [(ngModel)]="newTask.title" name="title" class="input" required placeholder="Ví dụ: Thiết kế cơ sở dữ liệu..." />
+        </div>
+
+        <div class="formgroup">
+          <label>Mô tả chi tiết</label>
+          <textarea [(ngModel)]="newTask.description" name="description" class="textarea" placeholder="Nội dung chi tiết cần thực hiện..."></textarea>
+        </div>
+
+        <div class="twofield">
+          <div class="formgroup">
+            <label>Người chịu trách nhiệm chính (Accountable Owner) *</label>
+            <select [(ngModel)]="newTask.owner" name="owner" class="select" style="width:100%" required>
+              <option *ngFor="let e of employees" [value]="e.id">{{ e.name }} ({{ e.title }})</option>
+            </select>
+          </div>
+
+          <div class="formgroup">
+            <label>Dự án</label>
+            <select [(ngModel)]="newTask.project" name="project" class="select" style="width:100%">
+              <option value="">Không thuộc dự án (Operations)</option>
+              <option *ngFor="let p of projects" [value]="p.id">{{ p.code }} - {{ p.name }}</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="twofield">
+          <div class="formgroup">
+            <label>Mức độ ưu tiên</label>
+            <select [(ngModel)]="newTask.priority" name="priority" class="select" style="width:100%">
+              <option value="CRITICAL">CRITICAL</option>
+              <option value="HIGH">HIGH</option>
+              <option value="MEDIUM">MEDIUM</option>
+              <option value="LOW">LOW</option>
+            </select>
+          </div>
+
+          <div class="formgroup">
+            <label>Hạn hoàn thành (Deadline)</label>
+            <input type="date" [(ngModel)]="newTask.due" name="due" class="input" />
+          </div>
+        </div>
+
+        <div class="formgroup">
+          <label>Tiêu chí nghiệm thu (Acceptance Criteria)</label>
+          <input [(ngModel)]="newTask.criteria" name="criteria" class="input" placeholder="Ví dụ: Unit test pass 100%, có tài liệu" />
+        </div>
+
+        <div class="actions" style="margin-top:20px;justify-content:flex-end">
+          <button type="button" class="btn" (click)="showCreateTaskModal = false">Hủy</button>
+          <button type="submit" class="btn primary">Tạo công việc</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- FLOATING TOAST NOTIFICATION -->
+  <div id="toast" *ngIf="showToast">
+    {{ toastMessage }}
+  </div>
+</div>

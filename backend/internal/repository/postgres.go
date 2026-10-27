@@ -1,0 +1,716 @@
+package repository
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"os"
+	"strings"
+	"time"
+
+	"github.com/cuongbuilh/ai-business-os/backend/internal/domain"
+	_ "github.com/lib/pq"
+)
+
+type PostgresRepo struct {
+	db *sql.DB
+}
+
+func NewPostgresRepo(databaseURL string) (*PostgresRepo, error) {
+	db, err := sql.Open("postgres", databaseURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open postgres connection: %w", err)
+	}
+
+	// Retry connection for up to 30 seconds (helps Docker compose startup order)
+	var pingErr error
+	for i := 0; i < 15; i++ {
+		pingErr = db.Ping()
+		if pingErr == nil {
+			break
+		}
+		time.Sleep(2 * time.Second)
+	}
+	if pingErr != nil {
+		return nil, fmt.Errorf("failed to ping postgres after retries: %w", pingErr)
+	}
+
+	repo := &PostgresRepo{db: db}
+	if err := repo.initSchema(); err != nil {
+		return nil, fmt.Errorf("failed to init schema: %w", err)
+	}
+
+	return repo, nil
+}
+
+func (r *PostgresRepo) initSchema() error {
+	initFiles := []string{
+		"migrations/001_init.sql",
+		"migrations/002_seed.sql",
+	}
+
+	for _, file := range initFiles {
+		content, err := os.ReadFile(file)
+		if err != nil {
+			// Fallback check if running from another directory
+			content, err = os.ReadFile("../" + file)
+			if err != nil {
+				continue
+			}
+		}
+		if _, err := r.db.Exec(string(content)); err != nil {
+			// Ignore seed conflict or proceed
+			fmt.Printf("Notice during migration (%s): %v\n", file, err)
+		}
+	}
+	return nil
+}
+
+func (r *PostgresRepo) GetDepartments(ctx context.Context) ([]domain.Department, error) {
+	rows, err := r.db.QueryContext(ctx, "SELECT id, organization_id, name, parent_department_id, created_at FROM departments")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []domain.Department
+	for rows.Next() {
+		var d domain.Department
+		if err := rows.Scan(&d.ID, &d.OrganizationID, &d.Name, &d.ParentDepartmentID, &d.CreatedAt); err != nil {
+			return nil, err
+		}
+		list = append(list, d)
+	}
+	return list, nil
+}
+
+func (r *PostgresRepo) GetTeams(ctx context.Context) ([]domain.Team, error) {
+	rows, err := r.db.QueryContext(ctx, "SELECT id, organization_id, department_id, name, lead_employee_id, created_at FROM teams")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []domain.Team
+	for rows.Next() {
+		var t domain.Team
+		if err := rows.Scan(&t.ID, &t.OrganizationID, &t.DepartmentID, &t.Name, &t.LeadEmployeeID, &t.CreatedAt); err != nil {
+			return nil, err
+		}
+		list = append(list, t)
+	}
+	return list, nil
+}
+
+func (r *PostgresRepo) GetPositions(ctx context.Context) ([]domain.Position, error) {
+	rows, err := r.db.QueryContext(ctx, "SELECT id, organization_id, department_id, title, role_code, description, cap_mcps FROM positions")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []domain.Position
+	for rows.Next() {
+		var p domain.Position
+		var capBytes []byte
+		if err := rows.Scan(&p.ID, &p.OrganizationID, &p.DepartmentID, &p.Title, &p.RoleCode, &p.Description, &capBytes); err != nil {
+			return nil, err
+		}
+		_ = json.Unmarshal(capBytes, &p.CapMCPs)
+		list = append(list, p)
+	}
+	return list, nil
+}
+
+func (r *PostgresRepo) GetEmployees(ctx context.Context) ([]domain.Employee, error) {
+	query := `
+		SELECT e.id, e.organization_id, e.department_id, e.position_id, e.display_name, e.kind, e.state,
+		       e.title, e.role_code, e.manager_id, COALESCE(m.display_name, 'None / Founder'),
+		       e.model_name, e.provider_name, e.skills, e.mcp_grants, e.team_ids, e.kpi_score,
+		       e.budget_usd, e.spent_usd, e.version, e.created_at, COALESCE(d.name, '')
+		FROM employees e
+		LEFT JOIN employees m ON e.manager_id = m.id
+		LEFT JOIN departments d ON e.department_id = d.id
+		ORDER BY e.created_at ASC
+	`
+	rows, err := r.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []domain.Employee
+	for rows.Next() {
+		var e domain.Employee
+		var skillsBytes, mcpBytes, teamBytes []byte
+		err := rows.Scan(
+			&e.ID, &e.OrganizationID, &e.DepartmentID, &e.PositionID, &e.DisplayName, &e.Kind, &e.State,
+			&e.Title, &e.Role, &e.ManagerID, &e.ManagerName,
+			&e.Model, &e.Provider, &skillsBytes, &mcpBytes, &teamBytes, &e.KPI,
+			&e.BudgetUSD, &e.SpentUSD, &e.Version, &e.CreatedAt, &e.DepartmentName,
+		)
+		if err != nil {
+			return nil, err
+		}
+		e.Name = e.DisplayName
+		_ = json.Unmarshal(skillsBytes, &e.Skills)
+		_ = json.Unmarshal(mcpBytes, &e.MCP)
+		_ = json.Unmarshal(teamBytes, &e.Teams)
+		list = append(list, e)
+	}
+	return list, nil
+}
+
+func (r *PostgresRepo) GetEmployeeByID(ctx context.Context, id string) (*domain.Employee, error) {
+	query := `
+		SELECT e.id, e.organization_id, e.department_id, e.position_id, e.display_name, e.kind, e.state,
+		       e.title, e.role_code, e.manager_id, COALESCE(m.display_name, 'None / Founder'),
+		       e.model_name, e.provider_name, e.skills, e.mcp_grants, e.team_ids, e.kpi_score,
+		       e.budget_usd, e.spent_usd, e.version, e.created_at, COALESCE(d.name, '')
+		FROM employees e
+		LEFT JOIN employees m ON e.manager_id = m.id
+		LEFT JOIN departments d ON e.department_id = d.id
+		WHERE e.id = $1
+	`
+	var e domain.Employee
+	var skillsBytes, mcpBytes, teamBytes []byte
+	err := r.db.QueryRowContext(ctx, query, id).Scan(
+		&e.ID, &e.OrganizationID, &e.DepartmentID, &e.PositionID, &e.DisplayName, &e.Kind, &e.State,
+		&e.Title, &e.Role, &e.ManagerID, &e.ManagerName,
+		&e.Model, &e.Provider, &skillsBytes, &mcpBytes, &teamBytes, &e.KPI,
+		&e.BudgetUSD, &e.SpentUSD, &e.Version, &e.CreatedAt, &e.DepartmentName,
+	)
+	if err != nil {
+		return nil, err
+	}
+	e.Name = e.DisplayName
+	_ = json.Unmarshal(skillsBytes, &e.Skills)
+	_ = json.Unmarshal(mcpBytes, &e.MCP)
+	_ = json.Unmarshal(teamBytes, &e.Teams)
+	return &e, nil
+}
+
+func (r *PostgresRepo) CreateEmployee(ctx context.Context, emp *domain.Employee) error {
+	skillsJSON, _ := json.Marshal(emp.Skills)
+	mcpJSON, _ := json.Marshal(emp.MCP)
+	teamJSON, _ := json.Marshal(emp.Teams)
+
+	query := `
+		INSERT INTO employees (
+			id, organization_id, department_id, position_id, display_name, kind, state,
+			title, role_code, manager_id, model_name, provider_name, skills, mcp_grants,
+			team_ids, kpi_score, budget_usd, spent_usd, version, created_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, now())
+	`
+	_, err := r.db.ExecContext(ctx, query,
+		emp.ID, "org-default", emp.DepartmentID, emp.PositionID, emp.DisplayName, emp.Kind, emp.State,
+		emp.Title, emp.Role, emp.ManagerID, emp.Model, emp.Provider, skillsJSON, mcpJSON,
+		teamJSON, emp.KPI, emp.BudgetUSD, emp.SpentUSD, 1,
+	)
+	return err
+}
+
+func (r *PostgresRepo) UpdateEmployee(ctx context.Context, emp *domain.Employee) error {
+	skillsJSON, _ := json.Marshal(emp.Skills)
+	mcpJSON, _ := json.Marshal(emp.MCP)
+	teamJSON, _ := json.Marshal(emp.Teams)
+
+	query := `
+		UPDATE employees SET
+			display_name = $1, title = $2, role_code = $3, manager_id = $4,
+			model_name = $5, provider_name = $6, skills = $7, mcp_grants = $8,
+			team_ids = $9, kpi_score = $10, budget_usd = $11, spent_usd = $12,
+			version = version + 1
+		WHERE id = $13
+	`
+	_, err := r.db.ExecContext(ctx, query,
+		emp.DisplayName, emp.Title, emp.Role, emp.ManagerID,
+		emp.Model, emp.Provider, skillsJSON, mcpJSON,
+		teamJSON, emp.KPI, emp.BudgetUSD, emp.SpentUSD, emp.ID,
+	)
+	return err
+}
+
+func (r *PostgresRepo) GetOrgTree(ctx context.Context) (*domain.OrgNode, error) {
+	employees, err := r.GetEmployees(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var root *domain.Employee
+	for _, e := range employees {
+		if e.ManagerID == nil {
+			copy := e
+			root = &copy
+			break
+		}
+	}
+	if root == nil && len(employees) > 0 {
+		copy := employees[0]
+		root = &copy
+	}
+	if root == nil {
+		return nil, fmt.Errorf("no employees found")
+	}
+
+	var buildNode func(e *domain.Employee) *domain.OrgNode
+	buildNode = func(e *domain.Employee) *domain.OrgNode {
+		node := &domain.OrgNode{
+			ID:         e.ID,
+			Name:       e.DisplayName,
+			Title:      e.Title,
+			Role:       e.Role,
+			Kind:       string(e.Kind),
+			Model:      e.Model,
+			Provider:   e.Provider,
+			Department: e.DepartmentName,
+			DirectSub:  make([]*domain.OrgNode, 0),
+		}
+		for _, child := range employees {
+			if child.ManagerID != nil && *child.ManagerID == e.ID {
+				childCopy := child
+				node.DirectSub = append(node.DirectSub, buildNode(&childCopy))
+			}
+		}
+		return node
+	}
+	return buildNode(root), nil
+}
+
+func (r *PostgresRepo) GetProjects(ctx context.Context) ([]domain.Project, error) {
+	query := `
+		SELECT p.id, p.organization_id, p.code, p.name, p.description, p.accountable_owner_id,
+		       COALESCE(e.display_name, ''), p.status, p.budget_usd, p.spent_usd, p.due_at,
+		       p.members, p.teams, p.milestones, p.created_at, p.version
+		FROM projects p
+		LEFT JOIN employees e ON p.accountable_owner_id = e.id
+		ORDER BY p.created_at ASC
+	`
+	rows, err := r.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []domain.Project
+	for rows.Next() {
+		var p domain.Project
+		var memBytes, teamBytes, mileBytes []byte
+		err := rows.Scan(
+			&p.ID, &p.OrganizationID, &p.Code, &p.Name, &p.Description, &p.AccountableOwnerID,
+			&p.OwnerName, &p.Status, &p.BudgetUSD, &p.SpentUSD, &p.DueAt,
+			&memBytes, &teamBytes, &mileBytes, &p.CreatedAt, &p.Version,
+		)
+		if err != nil {
+			return nil, err
+		}
+		_ = json.Unmarshal(memBytes, &p.Members)
+		_ = json.Unmarshal(teamBytes, &p.Teams)
+		_ = json.Unmarshal(mileBytes, &p.Milestones)
+		list = append(list, p)
+	}
+	return list, nil
+}
+
+func (r *PostgresRepo) GetProjectByID(ctx context.Context, id string) (*domain.Project, error) {
+	query := `
+		SELECT p.id, p.organization_id, p.code, p.name, p.description, p.accountable_owner_id,
+		       COALESCE(e.display_name, ''), p.status, p.budget_usd, p.spent_usd, p.due_at,
+		       p.members, p.teams, p.milestones, p.created_at, p.version
+		FROM projects p
+		LEFT JOIN employees e ON p.accountable_owner_id = e.id
+		WHERE p.id = $1
+	`
+	var p domain.Project
+	var memBytes, teamBytes, mileBytes []byte
+	err := r.db.QueryRowContext(ctx, query, id).Scan(
+		&p.ID, &p.OrganizationID, &p.Code, &p.Name, &p.Description, &p.AccountableOwnerID,
+		&p.OwnerName, &p.Status, &p.BudgetUSD, &p.SpentUSD, &p.DueAt,
+		&memBytes, &teamBytes, &mileBytes, &p.CreatedAt, &p.Version,
+	)
+	if err != nil {
+		return nil, err
+	}
+	_ = json.Unmarshal(memBytes, &p.Members)
+	_ = json.Unmarshal(teamBytes, &p.Teams)
+	_ = json.Unmarshal(mileBytes, &p.Milestones)
+	return &p, nil
+}
+
+func (r *PostgresRepo) CreateProject(ctx context.Context, p *domain.Project) error {
+	memJSON, _ := json.Marshal(p.Members)
+	teamJSON, _ := json.Marshal(p.Teams)
+	mileJSON, _ := json.Marshal(p.Milestones)
+
+	query := `
+		INSERT INTO projects (
+			id, organization_id, code, name, description, accountable_owner_id,
+			status, budget_usd, spent_usd, due_at, members, teams, milestones, created_at, version
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, now(), 1)
+	`
+	_, err := r.db.ExecContext(ctx, query,
+		p.ID, "org-default", p.Code, p.Name, p.Description, p.AccountableOwnerID,
+		p.Status, p.BudgetUSD, p.SpentUSD, p.DueAt, memJSON, teamJSON, mileJSON,
+	)
+	return err
+}
+
+func (r *PostgresRepo) UpdateProject(ctx context.Context, p *domain.Project) error {
+	memJSON, _ := json.Marshal(p.Members)
+	teamJSON, _ := json.Marshal(p.Teams)
+	mileJSON, _ := json.Marshal(p.Milestones)
+
+	query := `
+		UPDATE projects SET
+			code = $1, name = $2, description = $3, accountable_owner_id = $4,
+			status = $5, budget_usd = $6, spent_usd = $7, due_at = $8,
+			members = $9, teams = $10, milestones = $11, version = version + 1
+		WHERE id = $12
+	`
+	_, err := r.db.ExecContext(ctx, query,
+		p.Code, p.Name, p.Description, p.AccountableOwnerID,
+		p.Status, p.BudgetUSD, p.SpentUSD, p.DueAt,
+		memJSON, teamJSON, mileJSON, p.ID,
+	)
+	return err
+}
+
+func (r *PostgresRepo) GetTasks(ctx context.Context, scope, projectFilter, ownerFilter, statusFilter, search string) ([]domain.Task, error) {
+	query := `
+		SELECT t.id, t.organization_id, t.project_id, COALESCE(p.code, 'Operations'), COALESCE(p.name, ''),
+		       t.parent_task_id, t.title, t.description, t.accountable_owner_id, COALESCE(e.display_name, ''),
+		       t.collaborators, t.status, t.priority, t.acceptance_criteria, t.due_at, t.accepted_at,
+		       t.cost_usd, t.execs_count, t.origin_type, t.origin_ref, t.created_at, t.updated_at, t.version
+		FROM tasks t
+		LEFT JOIN projects p ON t.project_id = p.id
+		LEFT JOIN employees e ON t.accountable_owner_id = e.id
+		ORDER BY t.created_at DESC
+	`
+	rows, err := r.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var allTasks []domain.Task
+	for rows.Next() {
+		var t domain.Task
+		var collabBytes []byte
+		err := rows.Scan(
+			&t.ID, &t.OrganizationID, &t.ProjectID, &t.ProjectCode, &t.ProjectName,
+			&t.ParentTaskID, &t.Title, &t.Description, &t.AccountableOwnerID, &t.OwnerName,
+			&collabBytes, &t.Status, &t.Priority, &t.AcceptanceCriteria, &t.DueAt, &t.AcceptedAt,
+			&t.CostUSD, &t.ExecutionsCount, &t.OriginType, &t.OriginRef, &t.CreatedAt, &t.UpdatedAt, &t.Version,
+		)
+		if err != nil {
+			return nil, err
+		}
+		_ = json.Unmarshal(collabBytes, &t.Collaborators)
+		allTasks = append(allTasks, t)
+	}
+
+	// Apply scope and filters
+	// If scope or search filters are provided, evaluate them
+	searchLower := strings.ToLower(search)
+	var filtered []domain.Task
+	for _, t := range allTasks {
+		if projectFilter != "" && (t.ProjectID == nil || *t.ProjectID != projectFilter) {
+			continue
+		}
+		if ownerFilter != "" {
+			matched := t.AccountableOwnerID == ownerFilter
+			if !matched {
+				for _, c := range t.Collaborators {
+					if c == ownerFilter {
+						matched = true
+						break
+					}
+				}
+			}
+			if !matched {
+				continue
+			}
+		}
+		if statusFilter != "" && string(t.Status) != statusFilter {
+			continue
+		}
+		if searchLower != "" {
+			txt := strings.ToLower(fmt.Sprintf("%s %s %s %s", t.ID, t.Title, t.ProjectCode, t.OwnerName))
+			if !strings.Contains(txt, searchLower) {
+				continue
+			}
+		}
+		filtered = append(filtered, t)
+	}
+	return filtered, nil
+}
+
+func (r *PostgresRepo) GetTaskByID(ctx context.Context, id string) (*domain.Task, error) {
+	query := `
+		SELECT t.id, t.organization_id, t.project_id, COALESCE(p.code, 'Operations'), COALESCE(p.name, ''),
+		       t.parent_task_id, t.title, t.description, t.accountable_owner_id, COALESCE(e.display_name, ''),
+		       t.collaborators, t.status, t.priority, t.acceptance_criteria, t.due_at, t.accepted_at,
+		       t.cost_usd, t.execs_count, t.origin_type, t.origin_ref, t.created_at, t.updated_at, t.version
+		FROM tasks t
+		LEFT JOIN projects p ON t.project_id = p.id
+		LEFT JOIN employees e ON t.accountable_owner_id = e.id
+		WHERE t.id = $1
+	`
+	var t domain.Task
+	var collabBytes []byte
+	err := r.db.QueryRowContext(ctx, query, id).Scan(
+		&t.ID, &t.OrganizationID, &t.ProjectID, &t.ProjectCode, &t.ProjectName,
+		&t.ParentTaskID, &t.Title, &t.Description, &t.AccountableOwnerID, &t.OwnerName,
+		&collabBytes, &t.Status, &t.Priority, &t.AcceptanceCriteria, &t.DueAt, &t.AcceptedAt,
+		&t.CostUSD, &t.ExecutionsCount, &t.OriginType, &t.OriginRef, &t.CreatedAt, &t.UpdatedAt, &t.Version,
+	)
+	if err != nil {
+		return nil, err
+	}
+	_ = json.Unmarshal(collabBytes, &t.Collaborators)
+	return &t, nil
+}
+
+func (r *PostgresRepo) CreateTask(ctx context.Context, task *domain.Task) error {
+	collabJSON, _ := json.Marshal(task.Collaborators)
+	if task.ID == "" {
+		task.ID = fmt.Sprintf("T-%d", time.Now().Unix()%10000)
+	}
+
+	query := `
+		INSERT INTO tasks (
+			id, organization_id, project_id, parent_task_id, title, description,
+			accountable_owner_id, collaborators, status, priority, acceptance_criteria,
+			due_at, cost_usd, execs_count, origin_type, origin_ref, created_at, updated_at, version
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, now(), now(), 1)
+	`
+	_, err := r.db.ExecContext(ctx, query,
+		task.ID, "org-default", task.ProjectID, task.ParentTaskID, task.Title, task.Description,
+		task.AccountableOwnerID, collabJSON, task.Status, task.Priority, task.AcceptanceCriteria,
+		task.DueAt, task.CostUSD, task.ExecutionsCount, task.OriginType, task.OriginRef,
+	)
+	return err
+}
+
+func (r *PostgresRepo) UpdateTask(ctx context.Context, task *domain.Task) error {
+	collabJSON, _ := json.Marshal(task.Collaborators)
+	query := `
+		UPDATE tasks SET
+			project_id = $1, title = $2, description = $3, accountable_owner_id = $4,
+			collaborators = $5, status = $6, priority = $7, acceptance_criteria = $8,
+			due_at = $9, accepted_at = $10, cost_usd = $11, execs_count = $12,
+			updated_at = now(), version = version + 1
+		WHERE id = $13
+	`
+	_, err := r.db.ExecContext(ctx, query,
+		task.ProjectID, task.Title, task.Description, task.AccountableOwnerID,
+		collabJSON, task.Status, task.Priority, task.AcceptanceCriteria,
+		task.DueAt, task.AcceptedAt, task.CostUSD, task.ExecutionsCount, task.ID,
+	)
+	return err
+}
+
+func (r *PostgresRepo) GetExecutionsByTaskID(ctx context.Context, taskID string) ([]domain.Execution, error) {
+	query := `
+		SELECT x.id, x.organization_id, x.task_id, x.executing_employee_id, COALESCE(e.display_name, ''),
+		       x.status, x.attempt_no, x.idempotency_key, x.logs, x.steps, x.total_tokens, x.total_cost_usd,
+		       x.created_at, x.started_at, x.ended_at
+		FROM executions x
+		LEFT JOIN employees e ON x.executing_employee_id = e.id
+		WHERE x.task_id = $1
+		ORDER BY x.created_at DESC
+	`
+	rows, err := r.db.QueryContext(ctx, query, taskID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []domain.Execution
+	for rows.Next() {
+		var x domain.Execution
+		var logsBytes, stepsBytes []byte
+		err := rows.Scan(
+			&x.ID, &x.OrganizationID, &x.TaskID, &x.ExecutingEmployeeID, &x.ExecutingEmpName,
+			&x.Status, &x.AttemptNo, &x.IdempotencyKey, &logsBytes, &stepsBytes,
+			&x.TotalTokens, &x.TotalCostUSD, &x.CreatedAt, &x.StartedAt, &x.EndedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		_ = json.Unmarshal(logsBytes, &x.Logs)
+		_ = json.Unmarshal(stepsBytes, &x.Steps)
+		list = append(list, x)
+	}
+	return list, nil
+}
+
+func (r *PostgresRepo) CreateExecution(ctx context.Context, exec *domain.Execution) error {
+	logsJSON, _ := json.Marshal(exec.Logs)
+	stepsJSON, _ := json.Marshal(exec.Steps)
+
+	query := `
+		INSERT INTO executions (
+			id, organization_id, task_id, executing_employee_id, status,
+			attempt_no, idempotency_key, logs, steps, total_tokens, total_cost_usd,
+			created_at, started_at, ended_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now(), $12, $13)
+	`
+	_, err := r.db.ExecContext(ctx, query,
+		exec.ID, "org-default", exec.TaskID, exec.ExecutingEmployeeID, exec.Status,
+		exec.AttemptNo, exec.IdempotencyKey, logsJSON, stepsJSON, exec.TotalTokens, exec.TotalCostUSD,
+		exec.StartedAt, exec.EndedAt,
+	)
+	return err
+}
+
+func (r *PostgresRepo) UpdateExecution(ctx context.Context, exec *domain.Execution) error {
+	logsJSON, _ := json.Marshal(exec.Logs)
+	stepsJSON, _ := json.Marshal(exec.Steps)
+
+	query := `
+		UPDATE executions SET
+			status = $1, logs = $2, steps = $3, total_tokens = $4,
+			total_cost_usd = $5, ended_at = $6
+		WHERE id = $7
+	`
+	_, err := r.db.ExecContext(ctx, query,
+		exec.Status, logsJSON, stepsJSON, exec.TotalTokens,
+		exec.TotalCostUSD, exec.EndedAt, exec.ID,
+	)
+	return err
+}
+
+func (r *PostgresRepo) GetApprovals(ctx context.Context) ([]domain.ApprovalRequest, error) {
+	query := `
+		SELECT a.id, a.organization_id, a.task_id, COALESCE(t.title, ''), a.requested_by,
+		       COALESCE(e.display_name, ''), a.action_kind, a.payload_json, a.risk_tier,
+		       a.status, a.title, a.expires_at, a.resolved_by, a.resolved_at, a.created_at
+		FROM approval_requests a
+		LEFT JOIN tasks t ON a.task_id = t.id
+		LEFT JOIN employees e ON a.requested_by = e.id
+		ORDER BY a.created_at DESC
+	`
+	rows, err := r.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []domain.ApprovalRequest
+	for rows.Next() {
+		var a domain.ApprovalRequest
+		err := rows.Scan(
+			&a.ID, &a.OrganizationID, &a.TaskID, &a.TaskTitle, &a.RequestedByEmployeeID,
+			&a.RequesterName, &a.ActionKind, &a.PayloadJSON, &a.RiskTier,
+			&a.Status, &a.Title, &a.ExpiresAt, &a.ResolvedByEmployeeID, &a.ResolvedAt, &a.CreatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, a)
+	}
+	return list, nil
+}
+
+func (r *PostgresRepo) GetApprovalByID(ctx context.Context, id string) (*domain.ApprovalRequest, error) {
+	query := `
+		SELECT a.id, a.organization_id, a.task_id, COALESCE(t.title, ''), a.requested_by,
+		       COALESCE(e.display_name, ''), a.action_kind, a.payload_json, a.risk_tier,
+		       a.status, a.title, a.expires_at, a.resolved_by, a.resolved_at, a.created_at
+		FROM approval_requests a
+		LEFT JOIN tasks t ON a.task_id = t.id
+		LEFT JOIN employees e ON a.requested_by = e.id
+		WHERE a.id = $1
+	`
+	var a domain.ApprovalRequest
+	err := r.db.QueryRowContext(ctx, query, id).Scan(
+		&a.ID, &a.OrganizationID, &a.TaskID, &a.TaskTitle, &a.RequestedByEmployeeID,
+		&a.RequesterName, &a.ActionKind, &a.PayloadJSON, &a.RiskTier,
+		&a.Status, &a.Title, &a.ExpiresAt, &a.ResolvedByEmployeeID, &a.ResolvedAt, &a.CreatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &a, nil
+}
+
+func (r *PostgresRepo) UpdateApproval(ctx context.Context, a *domain.ApprovalRequest) error {
+	query := `
+		UPDATE approval_requests SET
+			status = $1, resolved_by = $2, resolved_at = $3
+		WHERE id = $4
+	`
+	_, err := r.db.ExecContext(ctx, query, a.Status, a.ResolvedByEmployeeID, a.ResolvedAt, a.ID)
+	return err
+}
+
+func (r *PostgresRepo) GetMCPServers(ctx context.Context) ([]domain.MCPServer, error) {
+	rows, err := r.db.QueryContext(ctx, "SELECT id, organization_id, name, transport, description, risk_tier, enabled, review_status, created_at FROM mcp_servers")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []domain.MCPServer
+	for rows.Next() {
+		var m domain.MCPServer
+		if err := rows.Scan(&m.ID, &m.OrganizationID, &m.Name, &m.Transport, &m.Description, &m.RiskTier, &m.Enabled, &m.ReviewStatus, &m.CreatedAt); err != nil {
+			return nil, err
+		}
+		list = append(list, m)
+	}
+	return list, nil
+}
+
+func (r *PostgresRepo) GetModels(ctx context.Context) ([]domain.ModelInfo, error) {
+	rows, err := r.db.QueryContext(ctx, "SELECT id, provider_code, model_id, revision, features, status FROM model_versions")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []domain.ModelInfo
+	for rows.Next() {
+		var m domain.ModelInfo
+		var featBytes []byte
+		if err := rows.Scan(&m.ID, &m.ProviderCode, &m.ModelID, &m.Revision, &featBytes, &m.Status); err != nil {
+			return nil, err
+		}
+		_ = json.Unmarshal(featBytes, &m.Features)
+		list = append(list, m)
+	}
+	return list, nil
+}
+
+func (r *PostgresRepo) GetBoardSummary(ctx context.Context, scope string) (*domain.BoardSummary, error) {
+	tasks, err := r.GetTasks(ctx, scope, "", "", "", "")
+	if err != nil {
+		return nil, err
+	}
+	summary := &domain.BoardSummary{
+		TotalTasks: len(tasks),
+	}
+	projects := make(map[string]bool)
+	for _, t := range tasks {
+		if t.Status == domain.TaskStateAccepted {
+			summary.AcceptedTasks++
+		}
+		if t.Status == domain.TaskStateInProgress || t.Status == domain.TaskStateInReview {
+			summary.ActiveTasks++
+		}
+		if t.Status == domain.TaskStateBlocked {
+			summary.BlockedTasks++
+		}
+		if t.Status == domain.TaskStateBacklog {
+			summary.BacklogTasks++
+		}
+		summary.TotalSpentUSD += t.CostUSD
+		if t.ProjectID != nil && *t.ProjectID != "" {
+			projects[*t.ProjectID] = true
+		}
+	}
+	summary.ProjectsCount = len(projects)
+	return summary, nil
+}

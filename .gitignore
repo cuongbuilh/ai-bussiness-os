@@ -1,0 +1,5 @@
+backend/server
+backend/bin/
+frontend/dist/
+frontend/node_modules/
+.env
