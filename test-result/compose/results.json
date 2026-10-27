@@ -49,54 +49,54 @@
   },
   {
     "id": "QA-CP-06",
-    "status": "FAIL",
+    "status": "PASS",
     "expected": "HTTP 401/403",
-    "actual": "HTTP 200",
+    "actual": "HTTP 401",
     "requirements": [
       "FR-SEC-001"
     ]
   },
   {
     "id": "QA-CP-07",
-    "status": "FAIL",
+    "status": "PASS",
     "expected": "HTTP 401/403",
-    "actual": "HTTP 200",
+    "actual": "HTTP 401",
     "requirements": [
       "AT-17"
     ]
   },
   {
     "id": "QA-CP-08",
-    "status": "FAIL",
+    "status": "PASS",
     "expected": "HTTP 401/403",
-    "actual": "HTTP 200",
+    "actual": "HTTP 401",
     "requirements": [
       "FR-SEC-001"
     ]
   },
   {
     "id": "QA-CP-09",
-    "status": "FAIL",
+    "status": "PASS",
     "expected": "Malformed/unauthorized scope rejected with HTTP 400/403",
-    "actual": "HTTP 200; body=None",
+    "actual": "HTTP 400; body={'error': 'unknown scope type: bogus'}",
     "requirements": [
       "BR-WORK-007"
     ]
   },
   {
     "id": "QA-CP-10",
-    "status": "FAIL",
+    "status": "PASS",
     "expected": "company:anything is not an authorized all-company scope",
-    "actual": "HTTP 200; task count=15",
+    "actual": "HTTP 400; task count=1",
     "requirements": [
       "BR-WORK-007"
     ]
   },
   {
     "id": "QA-CP-11",
-    "status": "FAIL",
+    "status": "PASS",
     "expected": "Postgres has reservation and immutable usage ledger tables",
-    "actual": "missing=['budget_accounts', 'budget_reservations', 'usage_ledger']",
+    "actual": "missing=[]",
     "requirements": [
       "FR-BUD-001",
       "FR-BUD-002",
@@ -106,9 +106,9 @@
   },
   {
     "id": "QA-CP-12",
-    "status": "FAIL",
+    "status": "PASS",
     "expected": "Docker frontend image builds with npm ci",
-    "actual": "npm ci lockfile mismatch",
+    "actual": "see build log",
     "requirements": [
       "C-08",
       "08-delivery release gate"
@@ -118,7 +118,7 @@
     "id": "QA-CP-13",
     "status": "PASS",
     "expected": "Task created by API persists in separate PostgreSQL QA database",
-    "actual": "POST 201; GET 200; id=T-6577",
+    "actual": "POST 201; GET 200; id=T-C53C7E65",
     "requirements": [
       "FR-WORK-006",
       "AT-05"
@@ -126,9 +126,9 @@
   },
   {
     "id": "QA-CP-14",
-    "status": "FAIL",
+    "status": "PASS",
     "expected": "Create response returns persisted organization, timestamp, version",
-    "actual": "POST org=, createdAt=0001-01-01T00:00:00Z, version=0; GET org=org-default, version=1",
+    "actual": "POST org=org-default, createdAt=2026-10-27T07:59:57.94398Z, version=1; GET org=org-default, version=1",
     "requirements": [
       "FR-WORK-006"
     ]
@@ -155,18 +155,18 @@
   },
   {
     "id": "QA-CP-17",
-    "status": "FAIL",
+    "status": "PASS",
     "expected": "READY to COMPLETED jump rejected",
-    "actual": "HTTP 200",
+    "actual": "HTTP 400",
     "requirements": [
       "BR-WORK-006"
     ]
   },
   {
     "id": "QA-CP-18",
-    "status": "FAIL",
+    "status": "PASS",
     "expected": "Anonymous in-review acceptance rejected",
-    "actual": "HTTP 200",
+    "actual": "HTTP 401",
     "requirements": [
       "BR-WORK-003",
       "AT-16"
@@ -174,9 +174,9 @@
   },
   {
     "id": "QA-CP-19",
-    "status": "FAIL",
+    "status": "PASS",
     "expected": "Forged token cannot approve as Founder",
-    "actual": "HTTP 200",
+    "actual": "HTTP 401",
     "requirements": [
       "BR-AUTH-001",
       "AT-22"
@@ -193,9 +193,9 @@
   },
   {
     "id": "QA-CP-21",
-    "status": "FAIL",
+    "status": "PASS",
     "expected": "Three concurrent create-task requests get distinct IDs",
-    "actual": "HTTP statuses=[201, 400, 400]; errors=[None, 'pq: duplicate key value violates unique constraint \"tasks_pkey\" (23505)', 'pq: duplicate key value violates unique constraint \"tasks_pkey\" (23505)']",
+    "actual": "HTTP statuses=[201, 201, 201]; errors=[None, None, None]",
     "requirements": [
       "FR-WORK-002",
       "FR-WORK-006"

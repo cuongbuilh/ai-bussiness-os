@@ -158,6 +158,47 @@ CREATE TABLE IF NOT EXISTS approval_requests (
     created_at timestamptz NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS budget_accounts (
+    id text PRIMARY KEY,
+    organization_id text NOT NULL REFERENCES organizations(id),
+    scope_type text NOT NULL,
+    scope_id text NOT NULL,
+    window_start timestamptz NOT NULL,
+    window_end timestamptz NOT NULL,
+    max_usd numeric(20,8),
+    max_tokens bigint,
+    max_tasks bigint,
+    max_runtime_seconds bigint
+);
+
+CREATE TABLE IF NOT EXISTS budget_reservations (
+    id text PRIMARY KEY,
+    organization_id text NOT NULL REFERENCES organizations(id),
+    execution_id text NOT NULL REFERENCES executions(id),
+    step_key text NOT NULL,
+    reserved_usd numeric(20,8) NOT NULL DEFAULT 0,
+    reserved_tokens bigint NOT NULL DEFAULT 0,
+    status text NOT NULL DEFAULT 'ACTIVE',
+    expires_at timestamptz NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS usage_ledger (
+    id text PRIMARY KEY,
+    organization_id text NOT NULL REFERENCES organizations(id),
+    execution_id text NOT NULL REFERENCES executions(id),
+    task_id text NOT NULL REFERENCES tasks(id),
+    project_id text REFERENCES projects(id),
+    employee_id text NOT NULL REFERENCES employees(id),
+    model_version_id text,
+    charge_reference text NOT NULL,
+    entry_type text NOT NULL,
+    posted_at timestamptz NOT NULL DEFAULT now(),
+    input_tokens bigint NOT NULL DEFAULT 0,
+    output_tokens bigint NOT NULL DEFAULT 0,
+    cache_read_tokens bigint NOT NULL DEFAULT 0,
+    cost_usd numeric(20,8) NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS mcp_servers (
     id text PRIMARY KEY,
     organization_id text NOT NULL REFERENCES organizations(id),

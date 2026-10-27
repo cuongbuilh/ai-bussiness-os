@@ -1,1 +1,3 @@
-{"error":"direct transition to accepted status is forbidden; tasks must be accepted through formal acceptance workflow"}
+{
+  "error": "direct transition to accepted status is forbidden; tasks must be accepted through formal acceptance workflow"
+}

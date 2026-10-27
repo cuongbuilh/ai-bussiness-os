@@ -1,4 +1,6 @@
 approval_requests
+budget_accounts
+budget_reservations
 departments
 employees
 executions
@@ -9,3 +11,4 @@ positions
 projects
 tasks
 teams
+usage_ledger

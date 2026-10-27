@@ -1,1 +1,3 @@
-null
+{
+  "error": "unknown scope type: bogus"
+}

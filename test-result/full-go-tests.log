@@ -1,17 +1,51 @@
 ?   	github.com/cuongbuilh/ai-business-os/backend/cmd/server	[no test files]
 ?   	github.com/cuongbuilh/ai-business-os/backend/internal/domain	[no test files]
---- FAIL: TestQA_RV_01_RejectForgedBearerToken (0.00s)
-    qa_reverification_test.go:60: forged bearer token accepted: HTTP 200
---- FAIL: TestQA_RV_02_RejectSpoofedApprovalActor (0.00s)
-    qa_reverification_test.go:67: forged token approved as founder: HTTP 200
---- FAIL: TestQA_RV_03_RejectAnonymousInReviewAcceptance (0.00s)
-    qa_reverification_test.go:74: anonymous acceptance succeeded: HTTP 200
---- FAIL: TestQA_RV_04_RejectReadyToCompletedJump (0.00s)
-    qa_reverification_test.go:83: READY to COMPLETED jump accepted: HTTP 200, status=completed
---- FAIL: TestQA_RV_05_ConcurrentBudgetNeverExceedsCap (0.00s)
-    qa_reverification_test.go:116: cap $0.37 admitted 2 concurrent runs
-FAIL
-FAIL	github.com/cuongbuilh/ai-business-os/backend/internal/handler	0.004s
+=== RUN   TestQA_RV_01_RejectForgedBearerToken
+--- PASS: TestQA_RV_01_RejectForgedBearerToken (0.00s)
+=== RUN   TestQA_RV_02_RejectSpoofedApprovalActor
+--- PASS: TestQA_RV_02_RejectSpoofedApprovalActor (0.00s)
+=== RUN   TestQA_RV_03_RejectAnonymousInReviewAcceptance
+--- PASS: TestQA_RV_03_RejectAnonymousInReviewAcceptance (0.00s)
+=== RUN   TestQA_RV_04_RejectReadyToCompletedJump
+--- PASS: TestQA_RV_04_RejectReadyToCompletedJump (0.00s)
+=== RUN   TestQA_RV_05_ConcurrentBudgetNeverExceedsCap
+--- PASS: TestQA_RV_05_ConcurrentBudgetNeverExceedsCap (0.00s)
+=== RUN   TestQA_API_01_AnonymousEmployeeList
+--- PASS: TestQA_API_01_AnonymousEmployeeList (0.00s)
+=== RUN   TestQA_API_02_UIFormCreatesTask
+--- PASS: TestQA_API_02_UIFormCreatesTask (0.00s)
+=== RUN   TestQA_API_03_RejectDirectAcceptedStatus
+--- PASS: TestQA_API_03_RejectDirectAcceptedStatus (0.00s)
+=== RUN   TestQA_API_04_RejectBacklogAcceptance
+--- PASS: TestQA_API_04_RejectBacklogAcceptance (0.00s)
+=== RUN   TestQA_API_05_RejectToolOutsideAgentGrants
+--- PASS: TestQA_API_05_RejectToolOutsideAgentGrants (0.00s)
+=== RUN   TestQA_API_06_RejectCallExceedingBudget
+--- PASS: TestQA_API_06_RejectCallExceedingBudget (0.00s)
+=== RUN   TestQA_API_07_RejectUnauthenticatedApproval
+--- PASS: TestQA_API_07_RejectUnauthenticatedApproval (0.00s)
+=== RUN   TestQA_API_08_ProjectScope
+--- PASS: TestQA_API_08_ProjectScope (0.00s)
+=== RUN   TestQA_API_09_RejectUnknownTaskStatus
+--- PASS: TestQA_API_09_RejectUnknownTaskStatus (0.00s)
+=== RUN   TestQA_API_10_RejectUnknownManager
+--- PASS: TestQA_API_10_RejectUnknownManager (0.00s)
+PASS
+ok  	github.com/cuongbuilh/ai-business-os/backend/internal/handler	(cached)
 ?   	github.com/cuongbuilh/ai-business-os/backend/internal/repository	[no test files]
-ok  	github.com/cuongbuilh/ai-business-os/backend/internal/service	0.003s
-FAIL
+=== RUN   TestOrgChartAndHierarchy
+--- PASS: TestOrgChartAndHierarchy (0.00s)
+=== RUN   TestBR_ORG_002_SelfReportingPrevented
+--- PASS: TestBR_ORG_002_SelfReportingPrevented (0.00s)
+=== RUN   TestBR_WORK_002_TaskAccountableOwnerRequired
+--- PASS: TestBR_WORK_002_TaskAccountableOwnerRequired (0.00s)
+=== RUN   TestBR_AUTH_001_NoSelfApproval
+--- PASS: TestBR_AUTH_001_NoSelfApproval (0.00s)
+=== RUN   TestTaskAcceptance
+--- PASS: TestTaskAcceptance (0.00s)
+=== RUN   TestTaskExecutionRun
+--- PASS: TestTaskExecutionRun (0.00s)
+=== RUN   TestScopeFiltering
+--- PASS: TestScopeFiltering (0.00s)
+PASS
+ok  	github.com/cuongbuilh/ai-business-os/backend/internal/service	(cached)

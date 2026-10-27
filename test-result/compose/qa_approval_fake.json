@@ -1,1 +1,3 @@
-{"decision":"APPROVE","status":"recorded"}
+{
+  "error": "unauthorized: invalid token"
+}

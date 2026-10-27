@@ -1,1 +1,19 @@
-{"id":"T-6605","organizationId":"","project":null,"title":"QA PG concurrent 1","description":"","owner":"q1","collab":null,"status":"ready","priority":"MEDIUM","criteria":"","due":"2026-11-01","cost":0,"execs":0,"originType":"HUMAN","createdAt":"0001-01-01T00:00:00Z","updatedAt":"0001-01-01T00:00:00Z","version":0}
+{
+  "id": "T-CA0B7206",
+  "organizationId": "org-default",
+  "project": "p1",
+  "title": "QA parallel 1",
+  "description": "",
+  "owner": "q1",
+  "collab": null,
+  "status": "ready",
+  "priority": "HIGH",
+  "criteria": "test",
+  "due": "2026-11-01",
+  "cost": 0,
+  "execs": 0,
+  "originType": "HUMAN",
+  "createdAt": "2026-10-27T07:59:57.977044Z",
+  "updatedAt": "2026-10-27T07:59:57.977044Z",
+  "version": 1
+}

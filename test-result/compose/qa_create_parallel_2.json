@@ -1,1 +1,19 @@
-{"error":"pq: duplicate key value violates unique constraint \"tasks_pkey\" (23505)"}
+{
+  "id": "T-9D7E63BA",
+  "organizationId": "org-default",
+  "project": "p1",
+  "title": "QA parallel 2",
+  "description": "",
+  "owner": "q1",
+  "collab": null,
+  "status": "ready",
+  "priority": "HIGH",
+  "criteria": "test",
+  "due": "2026-11-01",
+  "cost": 0,
+  "execs": 0,
+  "originType": "HUMAN",
+  "createdAt": "2026-10-27T07:59:57.977044Z",
+  "updatedAt": "2026-10-27T07:59:57.977044Z",
+  "version": 1
+}

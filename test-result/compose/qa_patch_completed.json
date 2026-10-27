@@ -1,1 +1,3 @@
-{"newStatus":"completed","status":"updated","taskId":"T-104"}
+{
+  "error": "BR-WORK-006 violation: invalid task status transition from completed to completed"
+}

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/cuongbuilh/ai-business-os/backend/internal/domain"
+	"github.com/google/uuid"
 	_ "github.com/lib/pq"
 )
 
@@ -478,7 +479,20 @@ func (r *PostgresRepo) GetTaskByID(ctx context.Context, id string) (*domain.Task
 func (r *PostgresRepo) CreateTask(ctx context.Context, task *domain.Task) error {
 	collabJSON, _ := json.Marshal(task.Collaborators)
 	if task.ID == "" {
-		task.ID = fmt.Sprintf("T-%d", time.Now().Unix()%10000)
+		task.ID = fmt.Sprintf("T-%s", strings.ToUpper(uuid.New().String()[:8]))
+	}
+	if task.OrganizationID == "" {
+		task.OrganizationID = "org-default"
+	}
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	if task.CreatedAt.IsZero() {
+		task.CreatedAt = now
+	}
+	if task.UpdatedAt.IsZero() {
+		task.UpdatedAt = now
+	}
+	if task.Version == 0 {
+		task.Version = 1
 	}
 
 	query := `
@@ -486,12 +500,13 @@ func (r *PostgresRepo) CreateTask(ctx context.Context, task *domain.Task) error 
 			id, organization_id, project_id, parent_task_id, title, description,
 			accountable_owner_id, collaborators, status, priority, acceptance_criteria,
 			due_at, cost_usd, execs_count, origin_type, origin_ref, created_at, updated_at, version
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, now(), now(), 1)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
 	`
 	_, err := r.db.ExecContext(ctx, query,
-		task.ID, "org-default", task.ProjectID, task.ParentTaskID, task.Title, task.Description,
+		task.ID, task.OrganizationID, task.ProjectID, task.ParentTaskID, task.Title, task.Description,
 		task.AccountableOwnerID, collabJSON, task.Status, task.Priority, task.AcceptanceCriteria,
 		task.DueAt, task.CostUSD, task.ExecutionsCount, task.OriginType, task.OriginRef,
+		task.CreatedAt, task.UpdatedAt, task.Version,
 	)
 	return err
 }

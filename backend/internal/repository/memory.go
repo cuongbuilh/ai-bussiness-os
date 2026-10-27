@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/cuongbuilh/ai-business-os/backend/internal/domain"
+	"github.com/google/uuid"
 )
 
 type MemoryRepo struct {
@@ -490,7 +491,18 @@ func (r *MemoryRepo) CreateTask(ctx context.Context, task *domain.Task) error {
 	defer r.mu.Unlock()
 
 	if task.ID == "" {
-		task.ID = fmt.Sprintf("T-%d", 200+len(r.tasks))
+		task.ID = fmt.Sprintf("T-%s", strings.ToUpper(uuid.New().String()[:8]))
+	}
+	if task.OrganizationID == "" {
+		task.OrganizationID = "org-default"
+	}
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	if task.CreatedAt.IsZero() {
+		task.CreatedAt = now
+	}
+	task.UpdatedAt = now
+	if task.Version == 0 {
+		task.Version = 1
 	}
 	if task.AccountableOwnerID != "" {
 		if emp, ok := r.employees[task.AccountableOwnerID]; ok {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cuongbuilh/ai-business-os/backend/internal/domain"
@@ -12,14 +13,19 @@ import (
 )
 
 type Services struct {
-	Repo   repository.Repository
-	Broker *EventBroker
+	Repo               repository.Repository
+	Broker             *EventBroker
+	budgetMu           sync.Mutex
+	activeReservations map[string]float64
+	committedSpend     map[string]float64
 }
 
 func NewServices(repo repository.Repository, broker *EventBroker) *Services {
 	return &Services{
-		Repo:   repo,
-		Broker: broker,
+		Repo:               repo,
+		Broker:             broker,
+		activeReservations: make(map[string]float64),
+		committedSpend:     make(map[string]float64),
 	}
 }
 
@@ -173,6 +179,17 @@ func (s *Services) CreateTask(ctx context.Context, task *domain.Task) error {
 	if task.OriginType == "" {
 		task.OriginType = "HUMAN"
 	}
+	if task.OrganizationID == "" {
+		task.OrganizationID = "org-default"
+	}
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	if task.CreatedAt.IsZero() {
+		task.CreatedAt = now
+	}
+	task.UpdatedAt = now
+	if task.Version == 0 {
+		task.Version = 1
+	}
 
 	if err := s.Repo.CreateTask(ctx, task); err != nil {
 		return err
@@ -191,6 +208,30 @@ func (s *Services) UpdateTaskStatus(ctx context.Context, taskID string, newStatu
 	task, err := s.Repo.GetTaskByID(ctx, taskID)
 	if err != nil {
 		return err
+	}
+
+	// QA-RV-04 & QA-CP-17: State machine transitions
+	// DRAFT -> BACKLOG -> READY -> IN_PROGRESS -> (BLOCKED | IN_REVIEW) -> COMPLETED -> ACCEPTED
+	allowedTransitions := map[domain.TaskState][]domain.TaskState{
+		domain.TaskStateDraft:      {domain.TaskStateBacklog, domain.TaskStateReady, domain.TaskStateCancelled},
+		domain.TaskStateBacklog:    {domain.TaskStateReady, domain.TaskStateDraft, domain.TaskStateCancelled},
+		domain.TaskStateReady:      {domain.TaskStateInProgress, domain.TaskStateBlocked, domain.TaskStateBacklog, domain.TaskStateCancelled},
+		domain.TaskStateInProgress: {domain.TaskStateInReview, domain.TaskStateBlocked, domain.TaskStateReady, domain.TaskStateCancelled, domain.TaskStateCompleted},
+		domain.TaskStateBlocked:    {domain.TaskStateReady, domain.TaskStateInProgress, domain.TaskStateCancelled},
+		domain.TaskStateInReview:   {domain.TaskStateCompleted, domain.TaskStateInProgress, domain.TaskStateRejected, domain.TaskStateCancelled},
+		domain.TaskStateCompleted:  {domain.TaskStateInProgress, domain.TaskStateInReview, domain.TaskStateCancelled},
+		domain.TaskStateRejected:   {domain.TaskStateInProgress, domain.TaskStateReady, domain.TaskStateCancelled},
+	}
+
+	valid := false
+	for _, next := range allowedTransitions[task.Status] {
+		if next == newStatus {
+			valid = true
+			break
+		}
+	}
+	if !valid {
+		return fmt.Errorf("BR-WORK-006 violation: invalid task status transition from %s to %s", task.Status, newStatus)
 	}
 
 	oldStatus := task.Status
@@ -288,12 +329,34 @@ func (s *Services) ExecuteTaskRun(ctx context.Context, taskID string) (*domain.E
 		effectiveMap[m] = true
 	}
 
-	// Estimate run cost first (BR-BUD-001 atomic estimate reservation)
 	estimatedRunCost := 0.37
-	if emp.BudgetUSD > 0 && (emp.SpentUSD+estimatedRunCost) > emp.BudgetUSD {
-		return nil, fmt.Errorf("BR-BUD-003 violation: planned run charge ($%.2f) exceeds remaining budget cap ($%.2f remaining of $%.2f cap)",
-			estimatedRunCost, emp.BudgetUSD-emp.SpentUSD, emp.BudgetUSD)
+
+	// BR-BUD-001 & BR-BUD-003 / QA-RV-05: Atomic budget reservation lock
+	s.budgetMu.Lock()
+	currentSpent := emp.SpentUSD
+	if s.committedSpend[emp.ID] > currentSpent {
+		currentSpent = s.committedSpend[emp.ID]
 	}
+	reserved := s.activeReservations[emp.ID]
+	if emp.BudgetUSD > 0 && (currentSpent+reserved+estimatedRunCost) > emp.BudgetUSD {
+		s.budgetMu.Unlock()
+		return nil, fmt.Errorf("BR-BUD-003 violation: planned run charge ($%.2f) exceeds remaining budget cap ($%.2f remaining of $%.2f cap)",
+			estimatedRunCost, emp.BudgetUSD-(currentSpent+reserved), emp.BudgetUSD)
+	}
+	s.activeReservations[emp.ID] += estimatedRunCost
+	s.budgetMu.Unlock()
+
+	hasReserved := true
+	defer func() {
+		if hasReserved {
+			s.budgetMu.Lock()
+			s.activeReservations[emp.ID] -= estimatedRunCost
+			if s.activeReservations[emp.ID] < 0 {
+				s.activeReservations[emp.ID] = 0
+			}
+			s.budgetMu.Unlock()
+		}
+	}()
 
 	now := time.Now()
 	execID := fmt.Sprintf("exec-%s", uuid.New().String()[:8])
@@ -409,6 +472,15 @@ func (s *Services) ExecuteTaskRun(ctx context.Context, taskID string) (*domain.E
 	exec.TotalTokens = totalTokens
 
 	// Settle ledger & update employee spend and task cost
+	s.budgetMu.Lock()
+	s.committedSpend[emp.ID] += totalCost
+	s.activeReservations[emp.ID] -= estimatedRunCost
+	if s.activeReservations[emp.ID] < 0 {
+		s.activeReservations[emp.ID] = 0
+	}
+	hasReserved = false
+	s.budgetMu.Unlock()
+
 	emp.SpentUSD += totalCost
 	_ = s.Repo.UpdateEmployee(ctx, emp)
 

@@ -1,1 +1,3 @@
-{"error":"unauthorized: missing authorization header"}
+{
+  "error": "unauthorized: missing authorization header"
+}

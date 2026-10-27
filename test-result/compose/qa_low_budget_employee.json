@@ -1,1 +1,22 @@
-{"id":"qa-pg-low","organizationId":"org-default","displayName":"QA PG Low","name":"QA PG Low","kind":"AI","state":"ACTIVE","title":"QA","role":"QA Automation","managerId":"h1","managerName":"Founder","model":"Model Y","provider":"Provider A","skills":null,"mcp":[],"teams":null,"kpi":90,"budget":0.1,"spent":0,"version":1,"createdAt":"2026-10-27T07:36:29.641529Z"}
+{
+  "id": "qa-pg-low",
+  "organizationId": "org-default",
+  "displayName": "QA PG Low",
+  "name": "QA PG Low",
+  "kind": "AI",
+  "state": "ACTIVE",
+  "title": "QA",
+  "role": "QA Automation",
+  "managerId": "h1",
+  "managerName": "Founder",
+  "model": "Model Y",
+  "provider": "Provider A",
+  "skills": null,
+  "mcp": [],
+  "teams": null,
+  "kpi": 90,
+  "budget": 0.1,
+  "spent": 0,
+  "version": 1,
+  "createdAt": "2026-10-27T07:36:29.641529Z"
+}
