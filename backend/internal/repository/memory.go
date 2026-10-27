@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -544,12 +545,27 @@ func (r *MemoryRepo) UpdateTask(ctx context.Context, task *domain.Task) error {
 func (r *MemoryRepo) GetExecutionsByTaskID(ctx context.Context, taskID string) ([]domain.Execution, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	var res []domain.Execution
+	res := make([]domain.Execution, 0)
 	for _, e := range r.executions {
 		if e.TaskID == taskID {
 			res = append(res, e)
 		}
 	}
+	return res, nil
+}
+
+func (r *MemoryRepo) GetExecutionsByEmployeeID(ctx context.Context, empID string) ([]domain.Execution, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	res := make([]domain.Execution, 0)
+	for _, e := range r.executions {
+		if e.ExecutingEmployeeID == empID {
+			res = append(res, e)
+		}
+	}
+	sort.Slice(res, func(i, j int) bool {
+		return res[i].CreatedAt.After(res[j].CreatedAt)
+	})
 	return res, nil
 }
 

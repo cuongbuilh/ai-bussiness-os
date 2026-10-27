@@ -32,6 +32,7 @@ type Repository interface {
 
 	// Executions
 	GetExecutionsByTaskID(ctx context.Context, taskID string) ([]domain.Execution, error)
+	GetExecutionsByEmployeeID(ctx context.Context, employeeID string) ([]domain.Execution, error)
 	CreateExecution(ctx context.Context, exec *domain.Execution) error
 	UpdateExecution(ctx context.Context, exec *domain.Execution) error
 

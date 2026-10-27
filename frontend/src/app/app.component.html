@@ -302,8 +302,8 @@
                     <div class="org-node"
                          [class.node-human]="node.kind === 'HUMAN'"
                          [class.node-manager]="node.role === 'AI Manager' || node.role === 'Tech Lead'"
-                         (click)="openEmployeeDetail(node.id)"
-                         [attr.title]="'Bấm để xem chi tiết nhân sự: ' + node.name">
+                         (click)="openEmployeeDetail(node.id, 'running')"
+                         [attr.title]="'Bấm để xem Agent đang chạy cái gì: ' + node.name">
                       <div class="org-node-header">
                         <span class="symbol" [class.symbol-human]="node.kind === 'HUMAN'">{{ node.kind === 'AI' ? '◈' : '◉' }}</span>
                         <span class="dept-badge">{{ node.department }}</span>
@@ -316,6 +316,14 @@
                       </div>
                       <div class="model model-human" *ngIf="node.kind === 'HUMAN'">
                         <span class="dot dot-human">●</span> Executive
+                      </div>
+
+                      <!-- Runtime Activity Badge -->
+                      <div class="runtime-badge active" *ngIf="node.kind === 'AI' && getRunningTasksCount(node.id) > 0">
+                        <span class="pulse-indicator">●</span> Đang chạy {{ getRunningTasksCount(node.id) }} task
+                      </div>
+                      <div class="runtime-badge idle" *ngIf="node.kind === 'AI' && getRunningTasksCount(node.id) === 0">
+                        <span class="idle-indicator">●</span> Sẵn sàng (IDLE)
                       </div>
                     </div>
                     <ul *ngIf="node.children && node.children.length > 0">
@@ -700,10 +708,125 @@
       </div>
 
       <div class="tabs">
+        <button class="tab" [class.selected]="selectedEmpTab === 'running'" (click)="setEmpTab('running')">
+          ⚡ Đang thực thi ({{ getRunningTasksCount(selectedEmployee.id) }})
+        </button>
         <button class="tab" [class.selected]="selectedEmpTab === 'overview'" (click)="setEmpTab('overview')">Tổng quan</button>
         <button class="tab" [class.selected]="selectedEmpTab === 'tasks'" (click)="setEmpTab('tasks')">Tasks ({{ getEmployeeTasks(selectedEmployee.id).length }})</button>
         <button class="tab" [class.selected]="selectedEmpTab === 'tools'" (click)="setEmpTab('tools')">MCP / Skills</button>
         <button class="tab" [class.selected]="selectedEmpTab === 'kpis'" (click)="setEmpTab('kpis')">Hiệu suất</button>
+      </div>
+
+      <!-- Tab 0: AGENT RUNTIME & WHAT AGENT IS RUNNING -->
+      <div *ngIf="selectedEmpTab === 'running'">
+        <!-- Runtime Status Banner -->
+        <div class="runtime-status-box" [ngClass]="getRunningTasksCount(selectedEmployee.id) > 0 ? 'status-running' : 'status-idle'">
+          <div class="row">
+            <div class="flex">
+              <span class="status-pulse-circle"></span>
+              <div>
+                <b style="font-size:14px">
+                  {{ getRunningTasksCount(selectedEmployee.id) > 0 ? 'Agent đang chạy ' + getRunningTasksCount(selectedEmployee.id) + ' công việc' : 'Agent đang sẵn sàng (IDLE)' }}
+                </b>
+                <div class="tiny muted">
+                  Mô hình: {{ selectedEmployee.model }} ({{ selectedEmployee.provider }})
+                </div>
+              </div>
+            </div>
+            <span class="chip font-mono">{{ selectedEmployee.kind }}</span>
+          </div>
+        </div>
+
+        <!-- Section: Active Tasks -->
+        <div class="row" style="margin-top:20px; margin-bottom:10px">
+          <h3 style="margin:0">Tasks đang thực thi ({{ getActiveTasksForEmployee(selectedEmployee.id).length }})</h3>
+          <span class="tiny muted" *ngIf="getActiveTasksForEmployee(selectedEmployee.id).length > 0">Nhấp để xem hoặc chạy ngay</span>
+        </div>
+        
+        <div *ngIf="getActiveTasksForEmployee(selectedEmployee.id).length === 0" class="empty-state-box">
+          <div style="font-size:24px; margin-bottom:8px">💤</div>
+          <b>Agent hiện không có task nào đang chạy</b>
+          <p class="small muted" style="margin:4px 0 12px">Tất cả nhiệm vụ đã hoàn thành hoặc chưa được giao việc mới.</p>
+          <button class="btn mini primary" (click)="openCreateTaskModal(selectedEmployee.id)">＋ Giao việc ngay</button>
+        </div>
+
+        <div *ngFor="let t of getActiveTasksForEmployee(selectedEmployee.id)" class="card active-task-card" style="margin-bottom:14px">
+          <div class="row">
+            <div>
+              <div class="font-mono small" style="color:var(--cyan)">{{ t.id }} · {{ t.projectCode || 'Operations' }}</div>
+              <b style="font-size:14px">{{ t.title }}</b>
+            </div>
+            <span class="status" [ngClass]="t.status">{{ t.status }}</span>
+          </div>
+
+          <p class="muted small" style="margin:8px 0 10px">{{ t.criteria || 'Không có tiêu chí cụ thể' }}</p>
+
+          <div class="kv"><span>Mức độ ưu tiên</span><b>{{ t.priority }}</b></div>
+          <div class="kv"><span>Hạn hoàn thành</span><b>{{ t.due }}</b></div>
+          <div class="kv"><span>Chi phí đã dùng</span><b>${{ t.cost.toFixed(2) }}</b></div>
+          <div class="kv"><span>Số lần chạy (Attempts)</span><b>{{ t.execs || 0 }} lần</b></div>
+
+          <!-- Execution Action Buttons -->
+          <div class="actions" style="margin-top:14px; gap:8px">
+            <button class="btn mini primary" [disabled]="isExecutingTask" (click)="runAgentTask(t.id)">
+              <span *ngIf="!isExecutingTask">▶ Kích hoạt chạy (Run Task)</span>
+              <span *ngIf="isExecutingTask">Đang chạy...</span>
+            </button>
+            <button *ngIf="t.status !== 'accepted'" class="btn mini success" (click)="acceptTask(t.id)">
+              ✓ Nghiệm thu
+            </button>
+            <button class="btn mini" (click)="openTaskDetail(t.id)">
+              🔍 Xem Full Logs
+            </button>
+          </div>
+        </div>
+
+        <!-- Section: Lịch sử & Chi tiết thực thi của Agent -->
+        <h3 style="margin-top:24px; margin-bottom:10px">Chi tiết thực thi & Trace của Agent ({{ selectedEmpExecutions.length }})</h3>
+
+        <div *ngIf="selectedEmpExecutions.length === 0" class="empty-state-box">
+          <div class="small muted">Chưa có bản ghi thực thi nào được ghi nhận cho Agent này. Bạn có thể bấm "▶ Kích hoạt chạy" ở task phía trên để Agent chạy luồng công việc!</div>
+        </div>
+
+        <div *ngFor="let ex of selectedEmpExecutions" class="card" style="margin-bottom:12px">
+          <div class="row">
+            <div>
+              <b>Phiên chạy #{{ ex.attemptNo }} · Task {{ ex.taskId }}</b>
+              <div class="tiny muted">Mô hình: {{ selectedEmployee.model }} · {{ ex.createdAt | date:'HH:mm:ss dd/MM' }}</div>
+            </div>
+            <span class="status" [ngClass]="ex.status.toLowerCase()">{{ ex.status }}</span>
+          </div>
+
+          <div class="small muted" style="margin-top:6px">
+            Tiêu thụ: <b>${{ ex.totalCostUsd.toFixed(2) }}</b> · <b>{{ ex.totalTokens }} tokens</b>
+          </div>
+
+          <!-- Steps Trace -->
+          <div *ngIf="ex.steps && ex.steps.length > 0" style="margin-top:10px">
+            <div *ngFor="let st of ex.steps" class="toolrow">
+              <div class="row">
+                <b>Bước {{ st.stepNo }}: {{ st.stepName }}</b>
+                <span class="chip" *ngIf="st.toolName">{{ st.toolName }}</span>
+              </div>
+              <div *ngIf="st.input" class="small" style="margin-top:4px">
+                <span class="muted">Input: </span>
+                <code class="font-mono">{{ st.input }}</code>
+              </div>
+              <div *ngIf="st.output" class="small" style="margin-top:4px">
+                <span class="muted">Output: </span>
+                <code class="font-mono">{{ st.output }}</code>
+              </div>
+              <div class="tiny muted" style="margin-top:4px">
+                {{ st.tokensUsed }} tokens · ${{ st.costUsd.toFixed(2) }} · {{ st.status }}
+              </div>
+            </div>
+          </div>
+
+          <!-- Terminal Logs -->
+          <div *ngIf="ex.logs && ex.logs.length > 0" class="log-terminal">
+            <div *ngFor="let l of ex.logs" class="log-line">{{ l }}</div>
+          </div>
+        </div>
       </div>
 
       <!-- Tab 1: Overview -->

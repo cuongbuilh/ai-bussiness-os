@@ -545,7 +545,42 @@ func (r *PostgresRepo) GetExecutionsByTaskID(ctx context.Context, taskID string)
 	}
 	defer rows.Close()
 
-	var list []domain.Execution
+	list := make([]domain.Execution, 0)
+	for rows.Next() {
+		var x domain.Execution
+		var logsBytes, stepsBytes []byte
+		err := rows.Scan(
+			&x.ID, &x.OrganizationID, &x.TaskID, &x.ExecutingEmployeeID, &x.ExecutingEmpName,
+			&x.Status, &x.AttemptNo, &x.IdempotencyKey, &logsBytes, &stepsBytes,
+			&x.TotalTokens, &x.TotalCostUSD, &x.CreatedAt, &x.StartedAt, &x.EndedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		_ = json.Unmarshal(logsBytes, &x.Logs)
+		_ = json.Unmarshal(stepsBytes, &x.Steps)
+		list = append(list, x)
+	}
+	return list, nil
+}
+
+func (r *PostgresRepo) GetExecutionsByEmployeeID(ctx context.Context, empID string) ([]domain.Execution, error) {
+	query := `
+		SELECT x.id, x.organization_id, x.task_id, x.executing_employee_id, COALESCE(e.display_name, ''),
+		       x.status, x.attempt_no, x.idempotency_key, x.logs, x.steps, x.total_tokens, x.total_cost_usd,
+		       x.created_at, x.started_at, x.ended_at
+		FROM executions x
+		LEFT JOIN employees e ON x.executing_employee_id = e.id
+		WHERE x.executing_employee_id = $1
+		ORDER BY x.created_at DESC
+	`
+	rows, err := r.db.QueryContext(ctx, query, empID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	list := make([]domain.Execution, 0)
 	for rows.Next() {
 		var x domain.Execution
 		var logsBytes, stepsBytes []byte

@@ -11,7 +11,7 @@ import {
 
 type PageTab = 'overview' | 'organization' | 'board' | 'projects' | 'employees' | 'capabilities' | 'approvals';
 type BoardMode = 'kanban' | 'table';
-type EmployeeTab = 'overview' | 'tasks' | 'tools' | 'kpis';
+type EmployeeTab = 'running' | 'overview' | 'tasks' | 'tools' | 'kpis';
 
 @Component({
   selector: 'app-root',
@@ -66,8 +66,9 @@ export class AppComponent implements OnInit, OnDestroy {
 
   // Selection states for Drawers/Modals
   selectedEmployee: Employee | null = null;
-  selectedEmpTab: EmployeeTab = 'overview';
+  selectedEmpTab: EmployeeTab = 'running';
   selectedEmpCaps: any = null;
+  selectedEmpExecutions: Execution[] = [];
 
   selectedTask: Task | null = null;
   taskExecutions: Execution[] = [];
@@ -354,12 +355,16 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   // ---------------- Employee Drawer ----------------
-  openEmployeeDetail(id: string, tab: EmployeeTab = 'overview'): void {
+  openEmployeeDetail(id: string, tab?: EmployeeTab): void {
+    const defaultTab: EmployeeTab = tab || 'running';
     this.api.getEmployeeDetail(id).subscribe(emp => {
       this.selectedEmployee = emp;
-      this.selectedEmpTab = tab;
+      this.selectedEmpTab = defaultTab;
       this.api.getEmployeeCapabilities(id).subscribe(caps => {
         this.selectedEmpCaps = caps;
+      });
+      this.api.getEmployeeExecutions(id).subscribe(execs => {
+        this.selectedEmpExecutions = execs;
       });
     });
   }
@@ -370,6 +375,35 @@ export class AppComponent implements OnInit, OnDestroy {
 
   getEmployeeTasks(empId: string): Task[] {
     return this.tasks.filter(t => t.owner === empId || t.collab?.includes(empId));
+  }
+
+  getActiveTasksForEmployee(empId: string): Task[] {
+    return this.tasks.filter(t => (t.owner === empId || t.collab?.includes(empId)) && ['in_progress', 'in_review', 'ready', 'blocked'].includes(t.status));
+  }
+
+  getRunningTasksCount(empId: string): number {
+    return this.getActiveTasksForEmployee(empId).length;
+  }
+
+  runAgentTask(taskId: string): void {
+    this.isExecutingTask = true;
+    this.api.executeTask(taskId).subscribe({
+      next: (exec) => {
+        this.isExecutingTask = false;
+        this.notify(`Agent ${exec.executingEmployeeName} đã chạy thành công task #${exec.attemptNo}!`);
+        this.loadTasks();
+        this.loadSummary();
+        if (this.selectedEmployee) {
+          this.api.getEmployeeExecutions(this.selectedEmployee.id).subscribe(execs => {
+            this.selectedEmpExecutions = execs;
+          });
+        }
+      },
+      error: (err) => {
+        this.isExecutingTask = false;
+        this.notify(`Lỗi thực thi: ${err?.error?.error || err.message}`);
+      }
+    });
   }
 
   // ---------------- Project Modal ----------------

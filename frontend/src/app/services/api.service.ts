@@ -257,6 +257,10 @@ export class ApiService {
     return this.http.get<Execution[]>(`${this.baseUrl}/tasks/${taskId}/executions`, { headers: this.headers });
   }
 
+  getEmployeeExecutions(employeeId: string): Observable<Execution[]> {
+    return this.http.get<Execution[]>(`${this.baseUrl}/employees/${employeeId}/executions`, { headers: this.headers });
+  }
+
   // ---------------- Approvals ----------------
   getApprovals(): Observable<ApprovalRequest[]> {
     return this.http.get<ApprovalRequest[]>(`${this.baseUrl}/approvals`, { headers: this.headers });

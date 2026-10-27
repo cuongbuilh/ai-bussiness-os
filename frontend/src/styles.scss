@@ -1081,6 +1081,90 @@ tr[data-id]:hover td, tr.clickable:hover td {
   color: var(--blue);
 }
 
+/* Runtime badges on org node */
+.runtime-badge {
+  margin-top: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 12px;
+  padding: 3px 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  letter-spacing: 0.1px;
+}
+
+.runtime-badge.active {
+  background: rgba(2, 132, 199, 0.15);
+  color: var(--cyan);
+  border: 1px solid rgba(2, 132, 199, 0.35);
+}
+
+.runtime-badge.idle {
+  background: rgba(148, 163, 184, 0.12);
+  color: var(--muted);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.pulse-indicator {
+  color: var(--cyan);
+  font-size: 8px;
+  animation: pulseDot 1.5s infinite;
+}
+
+.idle-indicator {
+  color: var(--muted);
+  font-size: 8px;
+}
+
+@keyframes pulseDot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(1.2); }
+}
+
+/* Runtime Drawer Elements */
+.runtime-status-box {
+  padding: 14px 16px;
+  border-radius: 12px;
+  margin-bottom: 16px;
+  border: 1px solid var(--line);
+  background: var(--panel2);
+}
+
+.runtime-status-box.status-running {
+  border-color: rgba(2, 132, 199, 0.4);
+  background: linear-gradient(145deg, rgba(2, 132, 199, 0.1), var(--panel2));
+}
+
+.runtime-status-box.status-idle {
+  border-color: var(--line);
+  background: var(--panel2);
+}
+
+.status-pulse-circle {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--cyan);
+  box-shadow: 0 0 10px var(--cyan);
+  display: inline-block;
+  animation: pulseDot 1.5s infinite;
+  margin-right: 6px;
+}
+
+.empty-state-box {
+  padding: 24px;
+  text-align: center;
+  background: var(--panel2);
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  margin: 10px 0;
+}
+
+.active-task-card {
+  border-left: 3px solid var(--cyan) !important;
+}
+
 .empty {
   padding: 48px 20px;
   text-align: center;

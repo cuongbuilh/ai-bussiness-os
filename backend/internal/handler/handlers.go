@@ -570,6 +570,20 @@ func (h *Handler) GetTaskExecutions(w http.ResponseWriter, r *http.Request) {
 	h.writeJSON(w, http.StatusOK, execs)
 }
 
+func (h *Handler) GetEmployeeExecutions(w http.ResponseWriter, r *http.Request) {
+	if _, err := h.authenticate(r); err != nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized: "+err.Error())
+		return
+	}
+	empID := chi.URLParam(r, "employeeId")
+	execs, err := h.svc.GetEmployeeExecutions(r.Context(), empID)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	h.writeJSON(w, http.StatusOK, execs)
+}
+
 // ----------------- Approvals -----------------
 
 func (h *Handler) ListApprovals(w http.ResponseWriter, r *http.Request) {

@@ -104,6 +104,7 @@ func main() {
 		r.Post("/employees", h.CreateEmployee)
 		r.Get("/employees/{employeeId}", h.GetEmployeeDetail)
 		r.Get("/employees/{employeeId}/capabilities", h.GetEmployeeCapabilities)
+		r.Get("/employees/{employeeId}/executions", h.GetEmployeeExecutions)
 
 		// Projects
 		r.Get("/projects", h.ListProjects)

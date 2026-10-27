@@ -533,6 +533,10 @@ func (s *Services) GetTaskExecutions(ctx context.Context, taskID string) ([]doma
 	return s.Repo.GetExecutionsByTaskID(ctx, taskID)
 }
 
+func (s *Services) GetEmployeeExecutions(ctx context.Context, employeeID string) ([]domain.Execution, error) {
+	return s.Repo.GetExecutionsByEmployeeID(ctx, employeeID)
+}
+
 // ----------------- Approvals -----------------
 
 func (s *Services) GetApprovals(ctx context.Context) ([]domain.ApprovalRequest, error) {
