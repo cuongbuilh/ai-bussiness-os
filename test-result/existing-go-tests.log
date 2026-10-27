@@ -1,0 +1,16 @@
+=== RUN   TestOrgChartAndHierarchy
+--- PASS: TestOrgChartAndHierarchy (0.00s)
+=== RUN   TestBR_ORG_002_SelfReportingPrevented
+--- PASS: TestBR_ORG_002_SelfReportingPrevented (0.00s)
+=== RUN   TestBR_WORK_002_TaskAccountableOwnerRequired
+--- PASS: TestBR_WORK_002_TaskAccountableOwnerRequired (0.00s)
+=== RUN   TestBR_AUTH_001_NoSelfApproval
+--- PASS: TestBR_AUTH_001_NoSelfApproval (0.00s)
+=== RUN   TestTaskAcceptance
+--- PASS: TestTaskAcceptance (0.00s)
+=== RUN   TestTaskExecutionRun
+--- PASS: TestTaskExecutionRun (0.00s)
+=== RUN   TestScopeFiltering
+--- PASS: TestScopeFiltering (0.00s)
+PASS
+ok  	github.com/cuongbuilh/ai-business-os/backend/internal/service	0.003s
