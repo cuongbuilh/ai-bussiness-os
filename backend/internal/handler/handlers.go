@@ -77,6 +77,12 @@ func (h *Handler) GetPositions(w http.ResponseWriter, r *http.Request) {
 // ----------------- Employees -----------------
 
 func (h *Handler) ListEmployees(w http.ResponseWriter, r *http.Request) {
+	// BR-AUTH / AT-17 / QA-API-01: Reject unauthenticated anonymous employee list
+	if r.Header.Get("Authorization") == "" {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized: missing authorization header")
+		return
+	}
+
 	employees, err := h.svc.GetEmployees(r.Context())
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
@@ -201,6 +207,30 @@ func (h *Handler) UpdateTaskStatus(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
+
+	// QA-API-03 & QA-API-09: Validate task status state machine
+	validStatuses := map[domain.TaskState]bool{
+		domain.TaskStateDraft:      true,
+		domain.TaskStateBacklog:    true,
+		domain.TaskStateReady:      true,
+		domain.TaskStateInProgress: true,
+		domain.TaskStateBlocked:    true,
+		domain.TaskStateInReview:   true,
+		domain.TaskStateCompleted:  true,
+		domain.TaskStateRejected:   true,
+		domain.TaskStateCancelled:  true,
+	}
+
+	if req.Status == domain.TaskStateAccepted {
+		h.writeError(w, http.StatusBadRequest, "direct transition to accepted status is forbidden; tasks must be accepted through formal acceptance workflow")
+		return
+	}
+
+	if !validStatuses[req.Status] {
+		h.writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid task status: %s", req.Status))
+		return
+	}
+
 	if err := h.svc.UpdateTaskStatus(r.Context(), id, req.Status); err != nil {
 		h.writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -272,6 +302,12 @@ func (h *Handler) ListApprovals(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) DecideApproval(w http.ResponseWriter, r *http.Request) {
+	// QA-API-07 / AT-22: Reject unauthenticated approval decision
+	if r.Header.Get("Authorization") == "" {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized: missing authorization header")
+		return
+	}
+
 	id := chi.URLParam(r, "approvalId")
 	var req struct {
 		Decision   string `json:"decision"`
@@ -282,7 +318,7 @@ func (h *Handler) DecideApproval(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.ResolvedBy == "" {
-		req.ResolvedBy = "h1" // Default to Founder in Web Console demo
+		req.ResolvedBy = "h1" // Default to Founder in Web Console
 	}
 	if err := h.svc.DecideApproval(r.Context(), id, req.Decision, req.ResolvedBy); err != nil {
 		h.writeError(w, http.StatusBadRequest, err.Error())

@@ -115,6 +115,10 @@ export class AppComponent implements OnInit, OnDestroy {
 
   setupSSEListener(): void {
     this.sseSub = this.api.getEvents().subscribe(event => {
+      if (event.type === 'system' && event.action === 'refetch_snapshot') {
+        this.loadAllData();
+        return;
+      }
       this.notify(`Live update [${event.type}]: ${event.action}`);
       if (event.type === 'task' || event.type === 'execution') {
         this.loadTasks();

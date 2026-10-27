@@ -411,10 +411,13 @@ func (r *PostgresRepo) GetTasks(ctx context.Context, scope, projectFilter, owner
 	}
 
 	// Apply scope and filters
-	// If scope or search filters are provided, evaluate them
+	employees, _ := r.GetEmployees(ctx)
 	searchLower := strings.ToLower(search)
 	var filtered []domain.Task
 	for _, t := range allTasks {
+		if !r.inScope(ctx, &t, scope, employees) {
+			continue
+		}
 		if projectFilter != "" && (t.ProjectID == nil || *t.ProjectID != projectFilter) {
 			continue
 		}
@@ -714,3 +717,75 @@ func (r *PostgresRepo) GetBoardSummary(ctx context.Context, scope string) (*doma
 	summary.ProjectsCount = len(projects)
 	return summary, nil
 }
+
+func (r *PostgresRepo) inScope(ctx context.Context, t *domain.Task, scope string, employees []domain.Employee) bool {
+	if scope == "" || scope == "company:all" {
+		return true
+	}
+	parts := strings.Split(scope, ":")
+	if len(parts) != 2 {
+		return true
+	}
+	scopeType, scopeID := parts[0], parts[1]
+	related := append([]string{t.AccountableOwnerID}, t.Collaborators...)
+
+	empMap := make(map[string]domain.Employee)
+	for _, e := range employees {
+		empMap[e.ID] = e
+	}
+
+	switch scopeType {
+	case "company":
+		return true
+	case "project":
+		return t.ProjectID != nil && *t.ProjectID == scopeID
+	case "department":
+		for _, id := range related {
+			if emp, ok := empMap[id]; ok && emp.DepartmentID != nil && *emp.DepartmentID == scopeID {
+				return true
+			}
+		}
+	case "team":
+		for _, id := range related {
+			if emp, ok := empMap[id]; ok {
+				for _, tm := range emp.Teams {
+					if tm == scopeID {
+						return true
+					}
+				}
+			}
+		}
+	case "employee":
+		for _, id := range related {
+			if id == scopeID {
+				return true
+			}
+		}
+	case "manager":
+		sub := make(map[string]bool)
+		sub[scopeID] = true
+		changed := true
+		for changed {
+			changed = false
+			for _, e := range employees {
+				if e.ManagerID != nil && sub[*e.ManagerID] && !sub[e.ID] {
+					sub[e.ID] = true
+					changed = true
+				}
+			}
+		}
+		for _, id := range related {
+			if sub[id] {
+				return true
+			}
+		}
+	case "role":
+		for _, id := range related {
+			if emp, ok := empMap[id]; ok && emp.Role == scopeID {
+				return true
+			}
+		}
+	}
+	return false
+}
+

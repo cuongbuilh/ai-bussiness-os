@@ -87,12 +87,19 @@ func TestTaskAcceptance(t *testing.T) {
 	svc := setupTestServices()
 	ctx := context.Background()
 
-	err := svc.AcceptTask(ctx, "T-102", "Looks good, tests pass")
-	if err != nil {
-		t.Fatalf("failed to accept task: %v", err)
+	// BR-WORK-003: Acceptance from in_progress should be rejected
+	err := svc.AcceptTask(ctx, "T-102", "premature acceptance")
+	if err == nil {
+		t.Fatalf("expected error when accepting in_progress task, got nil")
 	}
 
-	task, err := svc.GetTaskDetail(ctx, "T-102")
+	// T-103 is in in_review, so accepting it should succeed
+	err = svc.AcceptTask(ctx, "T-103", "Looks good, tests pass")
+	if err != nil {
+		t.Fatalf("failed to accept task in_review: %v", err)
+	}
+
+	task, err := svc.GetTaskDetail(ctx, "T-103")
 	if err != nil {
 		t.Fatalf("failed to get task: %v", err)
 	}

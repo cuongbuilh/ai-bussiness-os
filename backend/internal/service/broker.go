@@ -23,7 +23,7 @@ func NewEventBroker() *EventBroker {
 func (b *EventBroker) Subscribe() chan string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	ch := make(chan string, 32)
+	ch := make(chan string, 256)
 	b.subscribers[ch] = true
 	return ch
 }

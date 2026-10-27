@@ -5,13 +5,13 @@
 ❯ Building...
 ✔ Building...
 Initial chunk files   | Names         |  Raw size | Estimated transfer size
-main-MYPWOHIW.js      | main          | 316.11 kB |                78.69 kB
+main-5JZNMLIF.js      | main          | 316.90 kB |                78.82 kB
 polyfills-FFHMD2TL.js | polyfills     |  34.52 kB |                11.28 kB
 styles-JCGSEHUI.css   | styles        |  11.83 kB |                 3.16 kB
 
-                      | Initial total | 362.45 kB |                93.13 kB
+                      | Initial total | 363.24 kB |                93.27 kB
 
-Application bundle generation complete. [2.796 seconds]
+Application bundle generation complete. [2.647 seconds]
 
 Output location: /home/cuongbv/sources/cuongbuilh/ai-business-os-spec-v1.1/frontend/dist/web-console
 

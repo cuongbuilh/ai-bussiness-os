@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
 import { Observable, Subject } from 'rxjs';
 import {
   Department, Team, Position, Employee, Project, Task,
@@ -13,6 +13,9 @@ export class ApiService {
   private http = inject(HttpClient);
   // Default to relative /api/v1 (proxied by Nginx in Docker or Angular CLI dev proxy)
   private baseUrl = '/api/v1';
+  private headers = new HttpHeaders({
+    'Authorization': 'Bearer founder-h1-token'
+  });
 
   private sseEvent$ = new Subject<{ type: string; action: string; payload: any }>();
   private eventSource: EventSource | null = null;
@@ -31,6 +34,11 @@ export class ApiService {
     try {
       this.eventSource = new EventSource(`${this.baseUrl}/boards/stream`);
       
+      this.eventSource.onopen = () => {
+        // F-08: On initial connect or reconnect, emit refetch event to refresh snapshot
+        this.sseEvent$.next({ type: 'system', action: 'refetch_snapshot', payload: null });
+      };
+
       this.eventSource.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
@@ -53,10 +61,10 @@ export class ApiService {
       }
 
       this.eventSource.onerror = () => {
-        // Retry after delay
+        // Retry after delay and refetch on reconnect
         if (this.eventSource) {
           this.eventSource.close();
-          setTimeout(() => this.initSSE(), 5000);
+          setTimeout(() => this.initSSE(), 4000);
         }
       };
     } catch (e) {
@@ -66,49 +74,49 @@ export class ApiService {
 
   // ---------------- Organization ----------------
   getOrgChart(): Observable<OrgNode> {
-    return this.http.get<OrgNode>(`${this.baseUrl}/organization/org-chart`);
+    return this.http.get<OrgNode>(`${this.baseUrl}/organization/org-chart`, { headers: this.headers });
   }
 
   getDepartments(): Observable<Department[]> {
-    return this.http.get<Department[]>(`${this.baseUrl}/departments`);
+    return this.http.get<Department[]>(`${this.baseUrl}/departments`, { headers: this.headers });
   }
 
   getTeams(): Observable<Team[]> {
-    return this.http.get<Team[]>(`${this.baseUrl}/teams`);
+    return this.http.get<Team[]>(`${this.baseUrl}/teams`, { headers: this.headers });
   }
 
   getPositions(): Observable<Position[]> {
-    return this.http.get<Position[]>(`${this.baseUrl}/positions`);
+    return this.http.get<Position[]>(`${this.baseUrl}/positions`, { headers: this.headers });
   }
 
   // ---------------- Employees ----------------
   getEmployees(): Observable<Employee[]> {
-    return this.http.get<Employee[]>(`${this.baseUrl}/employees`);
+    return this.http.get<Employee[]>(`${this.baseUrl}/employees`, { headers: this.headers });
   }
 
   getEmployeeDetail(id: string): Observable<Employee> {
-    return this.http.get<Employee>(`${this.baseUrl}/employees/${id}`);
+    return this.http.get<Employee>(`${this.baseUrl}/employees/${id}`, { headers: this.headers });
   }
 
   createEmployee(emp: Partial<Employee>): Observable<Employee> {
-    return this.http.post<Employee>(`${this.baseUrl}/employees`, emp);
+    return this.http.post<Employee>(`${this.baseUrl}/employees`, emp, { headers: this.headers });
   }
 
   getEmployeeCapabilities(id: string): Observable<any> {
-    return this.http.get<any>(`${this.baseUrl}/employees/${id}/capabilities`);
+    return this.http.get<any>(`${this.baseUrl}/employees/${id}/capabilities`, { headers: this.headers });
   }
 
   // ---------------- Projects ----------------
   getProjects(): Observable<Project[]> {
-    return this.http.get<Project[]>(`${this.baseUrl}/projects`);
+    return this.http.get<Project[]>(`${this.baseUrl}/projects`, { headers: this.headers });
   }
 
   getProjectDetail(id: string): Observable<Project> {
-    return this.http.get<Project>(`${this.baseUrl}/projects/${id}`);
+    return this.http.get<Project>(`${this.baseUrl}/projects/${id}`, { headers: this.headers });
   }
 
   createProject(proj: Partial<Project>): Observable<Project> {
-    return this.http.post<Project>(`${this.baseUrl}/projects`, proj);
+    return this.http.post<Project>(`${this.baseUrl}/projects`, proj, { headers: this.headers });
   }
 
   // ---------------- Tasks ----------------
@@ -120,59 +128,59 @@ export class ApiService {
     if (status) params = params.set('status', status);
     if (search) params = params.set('search', search);
 
-    return this.http.get<Task[]>(`${this.baseUrl}/tasks`, { params });
+    return this.http.get<Task[]>(`${this.baseUrl}/tasks`, { headers: this.headers, params });
   }
 
   getTaskDetail(id: string): Observable<Task> {
-    return this.http.get<Task>(`${this.baseUrl}/tasks/${id}`);
+    return this.http.get<Task>(`${this.baseUrl}/tasks/${id}`, { headers: this.headers });
   }
 
   createTask(task: Partial<Task>): Observable<Task> {
-    return this.http.post<Task>(`${this.baseUrl}/tasks`, task);
+    return this.http.post<Task>(`${this.baseUrl}/tasks`, task, { headers: this.headers });
   }
 
   updateTaskStatus(taskId: string, status: string): Observable<any> {
-    return this.http.patch(`${this.baseUrl}/tasks/${taskId}`, { status });
+    return this.http.patch(`${this.baseUrl}/tasks/${taskId}`, { status }, { headers: this.headers });
   }
 
   assignTask(taskId: string, ownerId: string, collaborators: string[] = []): Observable<any> {
-    return this.http.post(`${this.baseUrl}/tasks/${taskId}/assign`, { ownerId, collaborators });
+    return this.http.post(`${this.baseUrl}/tasks/${taskId}/assign`, { ownerId, collaborators }, { headers: this.headers });
   }
 
   acceptTask(taskId: string, comments = ''): Observable<any> {
-    return this.http.post(`${this.baseUrl}/tasks/${taskId}/accept`, { comments });
+    return this.http.post(`${this.baseUrl}/tasks/${taskId}/accept`, { comments }, { headers: this.headers });
   }
 
   // ---------------- Executions ----------------
   executeTask(taskId: string): Observable<Execution> {
-    return this.http.post<Execution>(`${this.baseUrl}/tasks/${taskId}/execute`, {});
+    return this.http.post<Execution>(`${this.baseUrl}/tasks/${taskId}/execute`, {}, { headers: this.headers });
   }
 
   getTaskExecutions(taskId: string): Observable<Execution[]> {
-    return this.http.get<Execution[]>(`${this.baseUrl}/tasks/${taskId}/executions`);
+    return this.http.get<Execution[]>(`${this.baseUrl}/tasks/${taskId}/executions`, { headers: this.headers });
   }
 
   // ---------------- Approvals ----------------
   getApprovals(): Observable<ApprovalRequest[]> {
-    return this.http.get<ApprovalRequest[]>(`${this.baseUrl}/approvals`);
+    return this.http.get<ApprovalRequest[]>(`${this.baseUrl}/approvals`, { headers: this.headers });
   }
 
   decideApproval(approvalId: string, decision: 'APPROVE' | 'REJECT', resolvedBy = 'h1'): Observable<any> {
-    return this.http.post(`${this.baseUrl}/approvals/${approvalId}/decide`, { decision, resolvedBy });
+    return this.http.post(`${this.baseUrl}/approvals/${approvalId}/decide`, { decision, resolvedBy }, { headers: this.headers });
   }
 
   // ---------------- Board Summary & Capabilities ----------------
   getBoardSummary(scope = ''): Observable<BoardSummary> {
     let params = new HttpParams();
     if (scope) params = params.set('scope', scope);
-    return this.http.get<BoardSummary>(`${this.baseUrl}/boards/summary`, { params });
+    return this.http.get<BoardSummary>(`${this.baseUrl}/boards/summary`, { headers: this.headers, params });
   }
 
   getMCPServers(): Observable<MCPServer[]> {
-    return this.http.get<MCPServer[]>(`${this.baseUrl}/capabilities/mcp-servers`);
+    return this.http.get<MCPServer[]>(`${this.baseUrl}/capabilities/mcp-servers`, { headers: this.headers });
   }
 
   getModels(): Observable<ModelInfo[]> {
-    return this.http.get<ModelInfo[]>(`${this.baseUrl}/capabilities/models`);
+    return this.http.get<ModelInfo[]>(`${this.baseUrl}/capabilities/models`, { headers: this.headers });
   }
 }

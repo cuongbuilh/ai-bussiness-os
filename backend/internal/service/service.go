@@ -43,8 +43,16 @@ func (s *Services) CreateEmployee(ctx context.Context, emp *domain.Employee) err
 	}
 
 	// BR-ORG-002: Check cycle and self-reporting
-	if emp.ManagerID != nil && *emp.ManagerID == emp.ID {
-		return fmt.Errorf("BR-ORG-002 violation: employee cannot manage themselves")
+	if emp.ManagerID != nil && *emp.ManagerID != "" {
+		if *emp.ManagerID == emp.ID {
+			return fmt.Errorf("BR-ORG-002 violation: employee cannot manage themselves")
+		}
+
+		// BR-ORG-001: Manager must exist in the organization
+		mgr, err := s.Repo.GetEmployeeByID(ctx, *emp.ManagerID)
+		if err != nil || mgr == nil {
+			return fmt.Errorf("BR-ORG-001 violation: manager %s does not exist", *emp.ManagerID)
+		}
 	}
 
 	if emp.DisplayName == "" {
@@ -175,6 +183,11 @@ func (s *Services) CreateTask(ctx context.Context, task *domain.Task) error {
 }
 
 func (s *Services) UpdateTaskStatus(ctx context.Context, taskID string, newStatus domain.TaskState) error {
+	// BR-WORK-003: Direct transition to accepted via generic patch status is strictly forbidden
+	if newStatus == domain.TaskStateAccepted {
+		return fmt.Errorf("BR-WORK-003 violation: direct transition to accepted status is forbidden; tasks must be accepted through formal acceptance workflow")
+	}
+
 	task, err := s.Repo.GetTaskByID(ctx, taskID)
 	if err != nil {
 		return err
@@ -227,6 +240,11 @@ func (s *Services) AcceptTask(ctx context.Context, taskID string, comments strin
 		return err
 	}
 
+	// BR-WORK-003: Task can only be accepted if it has completed work (in_review or completed)
+	if task.Status != domain.TaskStateInReview && task.Status != domain.TaskStateCompleted {
+		return fmt.Errorf("BR-WORK-003 violation: task cannot be accepted from state %s; must be in_review or completed", task.Status)
+	}
+
 	now := time.Now()
 	task.Status = domain.TaskStateAccepted
 	task.AcceptedAt = &now
@@ -257,9 +275,24 @@ func (s *Services) ExecuteTaskRun(ctx context.Context, taskID string) (*domain.E
 		return nil, fmt.Errorf("executing agent employee not found: %w", err)
 	}
 
-	// BR-BUD-003: Check budget limit
-	if emp.BudgetUSD > 0 && emp.SpentUSD >= emp.BudgetUSD {
-		return nil, fmt.Errorf("BR-BUD-003 violation: monthly budget cap reached ($%.2f / $%.2f)", emp.SpentUSD, emp.BudgetUSD)
+	// Calculate effective tool grants (Position Ceiling ∩ Agent Grant)
+	caps, _ := s.GetEmployeeCapabilities(ctx, emp.ID)
+	var effectiveMCPs []string
+	if caps != nil {
+		if rawList, ok := caps["effectiveMCPs"].([]string); ok {
+			effectiveMCPs = rawList
+		}
+	}
+	effectiveMap := make(map[string]bool)
+	for _, m := range effectiveMCPs {
+		effectiveMap[m] = true
+	}
+
+	// Estimate run cost first (BR-BUD-001 atomic estimate reservation)
+	estimatedRunCost := 0.37
+	if emp.BudgetUSD > 0 && (emp.SpentUSD+estimatedRunCost) > emp.BudgetUSD {
+		return nil, fmt.Errorf("BR-BUD-003 violation: planned run charge ($%.2f) exceeds remaining budget cap ($%.2f remaining of $%.2f cap)",
+			estimatedRunCost, emp.BudgetUSD-emp.SpentUSD, emp.BudgetUSD)
 	}
 
 	now := time.Now()
@@ -279,51 +312,77 @@ func (s *Services) ExecuteTaskRun(ctx context.Context, taskID string) (*domain.E
 		Steps:               make([]domain.ExecutionStep, 0),
 	}
 
-	// Update task status to in_progress
-	task.Status = domain.TaskStateInProgress
-	task.ExecutionsCount++
-	_ = s.Repo.UpdateTask(ctx, task)
-	s.Broker.Publish("task", "status_changed", map[string]interface{}{"taskId": task.ID, "newStatus": task.Status})
-
-	// Generate step simulation according to agent skills & MCP
-	steps := []struct {
+	// Select execution steps strictly respecting agent's effective grants
+	type plannedStep struct {
 		name   string
 		tool   string
 		input  string
 		output string
 		cost   float64
 		tokens int64
-	}{
-		{
+	}
+	var plannedSteps []plannedStep
+
+	// Choose tools based ONLY on agent's granted capabilities
+	if effectiveMap["test-mcp"] {
+		plannedSteps = append(plannedSteps, plannedStep{
+			name:   "Execute test verification suite",
+			tool:   "test-mcp",
+			input:  fmt.Sprintf(`{"testScope":"%s","criteria":"%s"}`, task.Title, task.AcceptanceCriteria),
+			output: `{"passed":true,"coverage":96.4}`,
+			cost:   0.08,
+			tokens: 380,
+		})
+	} else if effectiveMap["task-mcp"] {
+		plannedSteps = append(plannedSteps, plannedStep{
 			name:   "Inspect context & criteria",
 			tool:   "task-mcp",
 			input:  fmt.Sprintf(`{"taskId":"%s","criteria":"%s"}`, task.ID, task.AcceptanceCriteria),
 			output: `{"status":"valid","criteriaMatched":true}`,
 			cost:   0.08,
 			tokens: 420,
-		},
-		{
-			name:   "Execute core skill procedure",
-			tool:   emp.Model,
-			input:  fmt.Sprintf(`{"prompt":"Solve %s for project %s"}`, task.Title, task.ProjectCode),
-			output: `{"result":"Solution formulated with comprehensive validation"}`,
-			cost:   0.24,
-			tokens: 1250,
-		},
-		{
+		})
+	}
+
+	// LLM Reasoning step using assigned model
+	modelName := emp.Model
+	if modelName == "" || modelName == "Human" {
+		modelName = "Model Y"
+	}
+	plannedSteps = append(plannedSteps, plannedStep{
+		name:   "Execute core skill reasoning",
+		tool:   modelName,
+		input:  fmt.Sprintf(`{"prompt":"Solve %s for project %s"}`, task.Title, task.ProjectCode),
+		output: `{"result":"Solution formulated with comprehensive validation"}`,
+		cost:   0.24,
+		tokens: 1250,
+	})
+
+	// Final verification/artifact step with allowed tool
+	if effectiveMap["git-mcp"] {
+		plannedSteps = append(plannedSteps, plannedStep{
+			name:   "Commit results to repository",
+			tool:   "git-mcp",
+			input:  fmt.Sprintf(`{"branch":"feature/%s","message":"Implement %s"}`, strings.ToLower(task.ID), task.Title),
+			output: `{"commitSha":"a1b2c3d4","status":"pushed"}`,
+			cost:   0.05,
+			tokens: 220,
+		})
+	} else if effectiveMap["docs-mcp"] {
+		plannedSteps = append(plannedSteps, plannedStep{
 			name:   "Record evidence & artifact",
 			tool:   "docs-mcp",
 			input:  `{"format":"markdown","status":"verified"}`,
 			output: `{"docId":"doc-evidence-final","published":true}`,
 			cost:   0.05,
 			tokens: 280,
-		},
+		})
 	}
 
 	var totalCost float64
 	var totalTokens int64
 
-	for i, stepInfo := range steps {
+	for i, stepInfo := range plannedSteps {
 		stepTime := time.Now()
 		step := domain.ExecutionStep{
 			StepNo:     i + 1,
@@ -354,7 +413,8 @@ func (s *Services) ExecuteTaskRun(ctx context.Context, taskID string) (*domain.E
 	_ = s.Repo.UpdateEmployee(ctx, emp)
 
 	task.CostUSD += totalCost
-	task.Status = domain.TaskStateInReview // Ready for review / completion!
+	task.ExecutionsCount++
+	task.Status = domain.TaskStateInReview // Ready for review!
 	_ = s.Repo.UpdateTask(ctx, task)
 
 	_ = s.Repo.CreateExecution(ctx, exec)
