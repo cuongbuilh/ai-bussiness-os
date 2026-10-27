@@ -330,34 +330,6 @@ func (s *Services) ExecuteTaskRun(ctx context.Context, taskID string) (*domain.E
 	}
 
 	estimatedRunCost := 0.37
-
-	// BR-BUD-001 & BR-BUD-003 / QA-RV-05: Atomic budget reservation lock
-	s.budgetMu.Lock()
-	currentSpent := emp.SpentUSD
-	if s.committedSpend[emp.ID] > currentSpent {
-		currentSpent = s.committedSpend[emp.ID]
-	}
-	reserved := s.activeReservations[emp.ID]
-	if emp.BudgetUSD > 0 && (currentSpent+reserved+estimatedRunCost) > emp.BudgetUSD {
-		s.budgetMu.Unlock()
-		return nil, fmt.Errorf("BR-BUD-003 violation: planned run charge ($%.2f) exceeds remaining budget cap ($%.2f remaining of $%.2f cap)",
-			estimatedRunCost, emp.BudgetUSD-(currentSpent+reserved), emp.BudgetUSD)
-	}
-	s.activeReservations[emp.ID] += estimatedRunCost
-	s.budgetMu.Unlock()
-
-	hasReserved := true
-	defer func() {
-		if hasReserved {
-			s.budgetMu.Lock()
-			s.activeReservations[emp.ID] -= estimatedRunCost
-			if s.activeReservations[emp.ID] < 0 {
-				s.activeReservations[emp.ID] = 0
-			}
-			s.budgetMu.Unlock()
-		}
-	}()
-
 	now := time.Now()
 	execID := fmt.Sprintf("exec-%s", uuid.New().String()[:8])
 	exec := &domain.Execution{
@@ -374,6 +346,53 @@ func (s *Services) ExecuteTaskRun(ctx context.Context, taskID string) (*domain.E
 		Logs:                []string{fmt.Sprintf("[%s] Agent %s initialized task run #%d", now.Format("15:04:05"), emp.DisplayName, task.ExecutionsCount+1)},
 		Steps:               make([]domain.ExecutionStep, 0),
 	}
+	if err := s.Repo.CreateExecution(ctx, exec); err != nil {
+		return nil, fmt.Errorf("failed to initialize execution: %w", err)
+	}
+
+	// BR-BUD-001 & BR-BUD-003 / QA-RV-05: Durable atomic budget reservation
+	s.budgetMu.Lock()
+	currentSpent := emp.SpentUSD
+	if s.committedSpend[emp.ID] > currentSpent {
+		currentSpent = s.committedSpend[emp.ID]
+	}
+	dbReserved, _ := s.Repo.GetActiveBudgetReservations(ctx, emp.ID)
+	reserved := s.activeReservations[emp.ID]
+	if dbReserved > reserved {
+		reserved = dbReserved
+	}
+	if emp.BudgetUSD > 0 && (currentSpent+reserved+estimatedRunCost) > emp.BudgetUSD {
+		s.budgetMu.Unlock()
+		return nil, fmt.Errorf("BR-BUD-003 violation: planned run charge ($%.2f) exceeds remaining budget cap ($%.2f remaining of $%.2f cap)",
+			estimatedRunCost, emp.BudgetUSD-(currentSpent+reserved), emp.BudgetUSD)
+	}
+
+	resID := fmt.Sprintf("res-%s", uuid.New().String()[:8])
+	res := &domain.BudgetReservation{
+		ID:             resID,
+		OrganizationID: task.OrganizationID,
+		ExecutionID:    exec.ID,
+		StepKey:        "task_run_reserve",
+		ReservedUSD:    estimatedRunCost,
+		Status:         "ACTIVE",
+		ExpiresAt:      now.Add(10 * time.Minute),
+	}
+	_ = s.Repo.CreateBudgetReservation(ctx, res)
+	s.activeReservations[emp.ID] += estimatedRunCost
+	s.budgetMu.Unlock()
+
+	hasReserved := true
+	defer func() {
+		if hasReserved {
+			s.budgetMu.Lock()
+			_ = s.Repo.UpdateBudgetReservationStatus(ctx, resID, "RELEASED")
+			s.activeReservations[emp.ID] -= estimatedRunCost
+			if s.activeReservations[emp.ID] < 0 {
+				s.activeReservations[emp.ID] = 0
+			}
+			s.budgetMu.Unlock()
+		}
+	}()
 
 	// Select execution steps strictly respecting agent's effective grants
 	type plannedStep struct {
@@ -473,6 +492,7 @@ func (s *Services) ExecuteTaskRun(ctx context.Context, taskID string) (*domain.E
 
 	// Settle ledger & update employee spend and task cost
 	s.budgetMu.Lock()
+	_ = s.Repo.UpdateBudgetReservationStatus(ctx, resID, "COMMITTED")
 	s.committedSpend[emp.ID] += totalCost
 	s.activeReservations[emp.ID] -= estimatedRunCost
 	if s.activeReservations[emp.ID] < 0 {
@@ -482,14 +502,39 @@ func (s *Services) ExecuteTaskRun(ctx context.Context, taskID string) (*domain.E
 	s.budgetMu.Unlock()
 
 	emp.SpentUSD += totalCost
-	_ = s.Repo.UpdateEmployee(ctx, emp)
+	if err := s.Repo.UpdateEmployee(ctx, emp); err != nil {
+		return nil, fmt.Errorf("failed to persist employee spent: %w", err)
+	}
 
 	task.CostUSD += totalCost
 	task.ExecutionsCount++
 	task.Status = domain.TaskStateInReview // Ready for review!
-	_ = s.Repo.UpdateTask(ctx, task)
+	if err := s.Repo.UpdateTask(ctx, task); err != nil {
+		return nil, fmt.Errorf("failed to persist task status: %w", err)
+	}
 
-	_ = s.Repo.CreateExecution(ctx, exec)
+	if err := s.Repo.UpdateExecution(ctx, exec); err != nil {
+		return nil, fmt.Errorf("failed to persist execution: %w", err)
+	}
+
+	// Record immutable steps into usage_ledger
+	for i, st := range exec.Steps {
+		entry := &domain.UsageLedgerEntry{
+			ID:              fmt.Sprintf("led-%s-%d", exec.ID, i+1),
+			OrganizationID:  task.OrganizationID,
+			ExecutionID:     exec.ID,
+			TaskID:          task.ID,
+			ProjectID:       task.ProjectID,
+			EmployeeID:      emp.ID,
+			ChargeReference: fmt.Sprintf("step-%d-%s", st.StepNo, st.ToolName),
+			EntryType:       "INFERENCE_STEP",
+			PostedAt:        st.Timestamp,
+			InputTokens:     st.TokensUsed,
+			OutputTokens:    0,
+			CostUSD:         st.CostUSD,
+		}
+		_ = s.Repo.RecordUsageLedger(ctx, entry)
+	}
 
 	s.Broker.Publish("execution", "completed", exec)
 	s.Broker.Publish("task", "status_changed", map[string]interface{}{"taskId": task.ID, "newStatus": task.Status})

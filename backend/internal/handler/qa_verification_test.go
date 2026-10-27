@@ -26,11 +26,12 @@ func qaRouter() http.Handler {
 	r.Patch("/tasks/{taskId}", h.UpdateTaskStatus)
 	r.Post("/tasks/{taskId}/accept", h.AcceptTask)
 	r.Post("/tasks/{taskId}/execute", h.ExecuteTask)
+	r.Get("/approvals", h.ListApprovals)
 	r.Post("/approvals/{approvalId}/decide", h.DecideApproval)
 	return r
 }
 
-func qaCall(t *testing.T, r http.Handler, method, path string, input any) (int, map[string]any) {
+func qaCallWithAuth(t *testing.T, r http.Handler, method, path string, input any, auth string) (int, map[string]any) {
 	t.Helper()
 	var body []byte
 	if input != nil {
@@ -40,11 +41,29 @@ func qaCall(t *testing.T, r http.Handler, method, path string, input any) (int, 
 	if input != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
+	if auth != "" {
+		req.Header.Set("Authorization", auth)
+	}
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	var data map[string]any
 	_ = json.Unmarshal(w.Body.Bytes(), &data)
 	return w.Code, data
+}
+
+func qaCall(t *testing.T, r http.Handler, method, path string, input any) (int, map[string]any) {
+	// Anonymous tests explicitly test lack of credentials
+	if path == "/employees" && method == "GET" {
+		return qaCallWithAuth(t, r, method, path, input, "")
+	}
+	if len(path) >= 10 && path[:10] == "/approvals" && method == "POST" {
+		return qaCallWithAuth(t, r, method, path, input, "")
+	}
+	if path == "/tasks/T-103/accept" && method == "POST" {
+		return qaCallWithAuth(t, r, method, path, input, "")
+	}
+	// Normal UI/client requests pass authenticated founder token
+	return qaCallWithAuth(t, r, method, path, input, "Bearer founder-h1-token")
 }
 
 func TestQA_API_01_AnonymousEmployeeList(t *testing.T) {
@@ -121,7 +140,9 @@ func TestQA_API_07_RejectUnauthenticatedApproval(t *testing.T) {
 func TestQA_API_08_ProjectScope(t *testing.T) {
 	r := qaRouter()
 	w := httptest.NewRecorder()
-	r.ServeHTTP(w, httptest.NewRequest("GET", "/tasks?scope=project:p1", nil))
+	req := httptest.NewRequest("GET", "/tasks?scope=project:p1", nil)
+	req.Header.Set("Authorization", "Bearer founder-h1-token")
+	r.ServeHTTP(w, req)
 	if w.Code != 200 {
 		t.Fatalf("expected 200, got %d", w.Code)
 	}

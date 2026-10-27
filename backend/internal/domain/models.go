@@ -277,3 +277,31 @@ type EventMessage struct {
 	Payload   interface{} `json:"payload"`
 	Timestamp time.Time   `json:"timestamp"`
 }
+
+type BudgetReservation struct {
+	ID             string    `json:"id"`
+	OrganizationID string    `json:"organizationId"`
+	ExecutionID    string    `json:"executionId"`
+	StepKey        string    `json:"stepKey"`
+	ReservedUSD    float64   `json:"reservedUsd"`
+	ReservedTokens int64     `json:"reservedTokens"`
+	Status         string    `json:"status"` // ACTIVE, COMMITTED, RELEASED
+	ExpiresAt      time.Time `json:"expiresAt"`
+}
+
+type UsageLedgerEntry struct {
+	ID               string    `json:"id"`
+	OrganizationID   string    `json:"organizationId"`
+	ExecutionID      string    `json:"executionId"`
+	TaskID           string    `json:"taskId"`
+	ProjectID        *string   `json:"projectId,omitempty"`
+	EmployeeID       string    `json:"employeeId"`
+	ModelVersionID   *string   `json:"modelVersionId,omitempty"`
+	ChargeReference  string    `json:"chargeReference"`
+	EntryType        string    `json:"entryType"`
+	PostedAt         time.Time `json:"postedAt"`
+	InputTokens      int64     `json:"inputTokens"`
+	OutputTokens     int64     `json:"outputTokens"`
+	CacheReadTokens  int64     `json:"cacheReadTokens"`
+	CostUSD          float64   `json:"costUsd"`
+}

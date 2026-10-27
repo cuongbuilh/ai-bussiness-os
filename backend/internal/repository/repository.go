@@ -46,4 +46,10 @@ type Repository interface {
 
 	// Metrics
 	GetBoardSummary(ctx context.Context, scope string) (*domain.BoardSummary, error)
+
+	// Budget & Ledger
+	CreateBudgetReservation(ctx context.Context, res *domain.BudgetReservation) error
+	UpdateBudgetReservationStatus(ctx context.Context, id, status string) error
+	GetActiveBudgetReservations(ctx context.Context, employeeID string) (float64, error)
+	RecordUsageLedger(ctx context.Context, entry *domain.UsageLedgerEntry) error
 }

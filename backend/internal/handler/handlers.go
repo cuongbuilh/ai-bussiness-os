@@ -59,20 +59,18 @@ func (h *Handler) authenticate(r *http.Request) (string, error) {
 		return "", fmt.Errorf("invalid token")
 	}
 
-	if token == "founder-h1-token" || token == "abos-token" || token == "founder" || token == "h1" || token == "token-h1" {
-		return "h1", nil
+	// Strictly allowed secure tokens (public IDs like "h1", "token-h1", "m1" are REJECTED to prevent impersonation)
+	validTokens := map[string]string{
+		"founder-h1-token":  "h1",
+		"abos-token":        "h1",
+		"abos-system-token": "h1",
 	}
 
-	// Check if token matches employee format
-	empID := strings.TrimPrefix(token, "token-")
-	if emp, err := h.svc.Repo.GetEmployeeByID(r.Context(), empID); err == nil && emp != nil {
-		return emp.ID, nil
-	}
-	if emp, err := h.svc.Repo.GetEmployeeByID(r.Context(), token); err == nil && emp != nil {
-		return emp.ID, nil
+	if principal, ok := validTokens[token]; ok {
+		return principal, nil
 	}
 
-	return "", fmt.Errorf("unauthorized token")
+	return "", fmt.Errorf("unauthorized: invalid or untrusted token")
 }
 
 func validateScope(scope string) error {
@@ -177,6 +175,10 @@ func (h *Handler) GetEmployeeDetail(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) CreateEmployee(w http.ResponseWriter, r *http.Request) {
+	if _, err := h.authenticate(r); err != nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized: "+err.Error())
+		return
+	}
 	var emp domain.Employee
 	if err := json.NewDecoder(r.Body).Decode(&emp); err != nil {
 		h.writeError(w, http.StatusBadRequest, "invalid request body")
@@ -236,26 +238,16 @@ func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 // ----------------- Tasks -----------------
 
 func (h *Handler) ListTasks(w http.ResponseWriter, r *http.Request) {
+	if _, err := h.authenticate(r); err != nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized: "+err.Error())
+		return
+	}
+
 	scope := r.URL.Query().Get("scope")
 	project := r.URL.Query().Get("project")
 	owner := r.URL.Query().Get("owner")
 	status := r.URL.Query().Get("status")
 	search := r.URL.Query().Get("search")
-
-	authHeader := r.Header.Get("Authorization")
-	// QA-CP-06: Anonymous task list without any scope/filter requires authentication
-	if scope == "" && project == "" && owner == "" && status == "" && search == "" && authHeader == "" {
-		h.writeError(w, http.StatusUnauthorized, "unauthorized: authentication required for anonymous tasks list")
-		return
-	}
-
-	// Validate authorization if provided
-	if authHeader != "" {
-		if _, err := h.authenticate(r); err != nil {
-			h.writeError(w, http.StatusUnauthorized, "unauthorized: "+err.Error())
-			return
-		}
-	}
 
 	// QA-CP-09 & QA-CP-10 / BR-WORK-007: Validate scope format and authorized company scope
 	if scope != "" {
@@ -274,6 +266,10 @@ func (h *Handler) ListTasks(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetTaskDetail(w http.ResponseWriter, r *http.Request) {
+	if _, err := h.authenticate(r); err != nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized: "+err.Error())
+		return
+	}
 	id := chi.URLParam(r, "taskId")
 	task, err := h.svc.GetTaskDetail(r.Context(), id)
 	if err != nil {
@@ -284,6 +280,10 @@ func (h *Handler) GetTaskDetail(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) CreateTask(w http.ResponseWriter, r *http.Request) {
+	if _, err := h.authenticate(r); err != nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized: "+err.Error())
+		return
+	}
 	var task domain.Task
 	if err := json.NewDecoder(r.Body).Decode(&task); err != nil {
 		h.writeError(w, http.StatusBadRequest, "invalid request body")
@@ -297,6 +297,10 @@ func (h *Handler) CreateTask(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) UpdateTaskStatus(w http.ResponseWriter, r *http.Request) {
+	if _, err := h.authenticate(r); err != nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized: "+err.Error())
+		return
+	}
 	id := chi.URLParam(r, "taskId")
 	var req struct {
 		Status domain.TaskState `json:"status"`
@@ -337,6 +341,10 @@ func (h *Handler) UpdateTaskStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) AssignTask(w http.ResponseWriter, r *http.Request) {
+	if _, err := h.authenticate(r); err != nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized: "+err.Error())
+		return
+	}
 	id := chi.URLParam(r, "taskId")
 	var req struct {
 		OwnerID       string   `json:"ownerId"`
@@ -388,6 +396,10 @@ func (h *Handler) AcceptTask(w http.ResponseWriter, r *http.Request) {
 // ----------------- Executions -----------------
 
 func (h *Handler) ExecuteTask(w http.ResponseWriter, r *http.Request) {
+	if _, err := h.authenticate(r); err != nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized: "+err.Error())
+		return
+	}
 	id := chi.URLParam(r, "taskId")
 	exec, err := h.svc.ExecuteTaskRun(r.Context(), id)
 	if err != nil {
@@ -398,6 +410,10 @@ func (h *Handler) ExecuteTask(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetTaskExecutions(w http.ResponseWriter, r *http.Request) {
+	if _, err := h.authenticate(r); err != nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized: "+err.Error())
+		return
+	}
 	id := chi.URLParam(r, "taskId")
 	execs, err := h.svc.GetTaskExecutions(r.Context(), id)
 	if err != nil {
@@ -410,6 +426,10 @@ func (h *Handler) GetTaskExecutions(w http.ResponseWriter, r *http.Request) {
 // ----------------- Approvals -----------------
 
 func (h *Handler) ListApprovals(w http.ResponseWriter, r *http.Request) {
+	if _, err := h.authenticate(r); err != nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized: "+err.Error())
+		return
+	}
 	approvals, err := h.svc.GetApprovals(r.Context())
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
@@ -435,9 +455,12 @@ func (h *Handler) DecideApproval(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	if req.ResolvedBy == "" {
-		req.ResolvedBy = principal
+	// BR-AUTH-001 & Identity Binding: resolvedBy MUST match the authenticated principal!
+	if req.ResolvedBy != "" && req.ResolvedBy != principal {
+		h.writeError(w, http.StatusForbidden, fmt.Sprintf("forbidden: actor '%s' cannot decide approval on behalf of '%s'", principal, req.ResolvedBy))
+		return
 	}
+	req.ResolvedBy = principal
 	if err := h.svc.DecideApproval(r.Context(), id, req.Decision, req.ResolvedBy); err != nil {
 		h.writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -448,6 +471,10 @@ func (h *Handler) DecideApproval(w http.ResponseWriter, r *http.Request) {
 // ----------------- Board Summary & SSE Stream -----------------
 
 func (h *Handler) GetBoardSummary(w http.ResponseWriter, r *http.Request) {
+	if _, err := h.authenticate(r); err != nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized: "+err.Error())
+		return
+	}
 	scope := r.URL.Query().Get("scope")
 	if scope != "" {
 		if err := validateScope(scope); err != nil {

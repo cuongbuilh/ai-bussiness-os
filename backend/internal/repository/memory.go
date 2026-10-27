@@ -21,23 +21,27 @@ type MemoryRepo struct {
 	projects    map[string]domain.Project
 	tasks       map[string]domain.Task
 	executions  map[string]domain.Execution
-	approvals   map[string]domain.ApprovalRequest
-	mcpServers  map[string]domain.MCPServer
-	models      map[string]domain.ModelInfo
+	approvals    map[string]domain.ApprovalRequest
+	mcpServers   map[string]domain.MCPServer
+	models       map[string]domain.ModelInfo
+	reservations map[string]domain.BudgetReservation
+	usageLedger  []domain.UsageLedgerEntry
 }
 
 func NewMemoryRepo() *MemoryRepo {
 	r := &MemoryRepo{
-		departments: make(map[string]domain.Department),
-		teams:       make(map[string]domain.Team),
-		positions:   make(map[string]domain.Position),
-		employees:   make(map[string]domain.Employee),
-		projects:    make(map[string]domain.Project),
-		tasks:       make(map[string]domain.Task),
-		executions:  make(map[string]domain.Execution),
-		approvals:   make(map[string]domain.ApprovalRequest),
-		mcpServers:  make(map[string]domain.MCPServer),
-		models:      make(map[string]domain.ModelInfo),
+		departments:  make(map[string]domain.Department),
+		teams:        make(map[string]domain.Team),
+		positions:    make(map[string]domain.Position),
+		employees:    make(map[string]domain.Employee),
+		projects:     make(map[string]domain.Project),
+		tasks:        make(map[string]domain.Task),
+		executions:   make(map[string]domain.Execution),
+		approvals:    make(map[string]domain.ApprovalRequest),
+		mcpServers:   make(map[string]domain.MCPServer),
+		models:       make(map[string]domain.ModelInfo),
+		reservations: make(map[string]domain.BudgetReservation),
+		usageLedger:  make([]domain.UsageLedgerEntry, 0),
 	}
 	r.seed()
 	return r
@@ -639,4 +643,45 @@ func (r *MemoryRepo) GetBoardSummary(ctx context.Context, scope string) (*domain
 	}
 	summary.ProjectsCount = len(projects)
 	return summary, nil
+}
+
+func (r *MemoryRepo) CreateBudgetReservation(ctx context.Context, res *domain.BudgetReservation) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.reservations[res.ID] = *res
+	return nil
+}
+
+func (r *MemoryRepo) UpdateBudgetReservationStatus(ctx context.Context, id, status string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if res, ok := r.reservations[id]; ok {
+		res.Status = status
+		r.reservations[id] = res
+		return nil
+	}
+	return fmt.Errorf("reservation not found: %s", id)
+}
+
+func (r *MemoryRepo) GetActiveBudgetReservations(ctx context.Context, employeeID string) (float64, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	now := time.Now()
+	var total float64
+	for _, res := range r.reservations {
+		if res.Status == "ACTIVE" && res.ExpiresAt.After(now) {
+			// Find executing employee via execution
+			if exec, ok := r.executions[res.ExecutionID]; ok && exec.ExecutingEmployeeID == employeeID {
+				total += res.ReservedUSD
+			}
+		}
+	}
+	return total, nil
+}
+
+func (r *MemoryRepo) RecordUsageLedger(ctx context.Context, entry *domain.UsageLedgerEntry) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.usageLedger = append(r.usageLedger, *entry)
+	return nil
 }

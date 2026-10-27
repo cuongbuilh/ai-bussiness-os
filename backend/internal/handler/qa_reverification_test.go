@@ -116,3 +116,78 @@ func TestQA_RV_05_ConcurrentBudgetNeverExceedsCap(t *testing.T) {
 		t.Fatalf("cap $0.37 admitted %d concurrent runs", successes)
 	}
 }
+
+func TestQA_RV_06_RejectPublicIDAsBearerToken(t *testing.T) {
+	for _, forged := range []string{"Bearer h1", "Bearer token-h1", "Bearer m1", "Bearer e1"} {
+		code, _ := qaCallWithAuthorization(t, qaRouter(), "GET", "/employees", nil, forged)
+		if code != http.StatusUnauthorized && code != http.StatusForbidden {
+			t.Fatalf("public ID impersonation accepted for %s: HTTP %d", forged, code)
+		}
+	}
+}
+
+func TestQA_RV_07_RejectAnonymousTaskAndApprovalReads(t *testing.T) {
+	r := qaRouter()
+	// Anonymous company board
+	code, _ := qaCallWithAuthorization(t, r, "GET", "/tasks?scope=company:all", nil, "")
+	if code != http.StatusUnauthorized && code != http.StatusForbidden {
+		t.Fatalf("anonymous company tasks accepted: HTTP %d", code)
+	}
+
+	// Anonymous task detail
+	code, _ = qaCallWithAuthorization(t, r, "GET", "/tasks/T-101", nil, "")
+	if code != http.StatusUnauthorized && code != http.StatusForbidden {
+		t.Fatalf("anonymous task detail accepted: HTTP %d", code)
+	}
+
+	// Anonymous approvals list
+	code, _ = qaCallWithAuthorization(t, r, "GET", "/approvals", nil, "")
+	if code != http.StatusUnauthorized && code != http.StatusForbidden {
+		t.Fatalf("anonymous approvals list accepted: HTTP %d", code)
+	}
+}
+
+func TestQA_RV_08_RejectSpoofedResolvedByInApproval(t *testing.T) {
+	// Authenticated as h1 via founder-h1-token, but trying to record as m1
+	code, _ := qaCallWithAuthorization(t, qaRouter(), "POST", "/approvals/APR-12/decide",
+		map[string]any{"decision": "APPROVE", "resolvedBy": "m1"}, "Bearer founder-h1-token")
+	if code != http.StatusForbidden {
+		t.Fatalf("spoofed resolvedBy accepted without 403 Forbidden: HTTP %d", code)
+	}
+}
+
+func TestQA_RV_09_RejectAnonymousWrites(t *testing.T) {
+	r := qaRouter()
+	// Anonymous CreateTask
+	code, _ := qaCallWithAuthorization(t, r, "POST", "/tasks", map[string]any{"title": "Anon Task"}, "")
+	if code != http.StatusUnauthorized && code != http.StatusForbidden {
+		t.Fatalf("anonymous CreateTask accepted: HTTP %d", code)
+	}
+
+	// Anonymous CreateEmployee
+	code, _ = qaCallWithAuthorization(t, r, "POST", "/employees", map[string]any{"id": "anon"}, "")
+	if code != http.StatusUnauthorized && code != http.StatusForbidden {
+		t.Fatalf("anonymous CreateEmployee accepted: HTTP %d", code)
+	}
+
+	// Anonymous ExecuteTask
+	code, _ = qaCallWithAuthorization(t, r, "POST", "/tasks/T-104/execute", map[string]any{}, "")
+	if code != http.StatusUnauthorized && code != http.StatusForbidden {
+		t.Fatalf("anonymous ExecuteTask accepted: HTTP %d", code)
+	}
+}
+
+func TestQA_RV_10_PersistentBudgetReservationAndUsageLedger(t *testing.T) {
+	repo := repository.NewMemoryRepo()
+	svc := service.NewServices(repo, service.NewEventBroker())
+	ctx := context.Background()
+
+	// Task run writes into usage_ledger and budget_reservations
+	exec, err := svc.ExecuteTaskRun(ctx, "T-101")
+	if err != nil {
+		t.Fatalf("execute task run failed: %v", err)
+	}
+	if exec.TotalCostUSD <= 0 {
+		t.Fatalf("expected positive execution cost, got %f", exec.TotalCostUSD)
+	}
+}

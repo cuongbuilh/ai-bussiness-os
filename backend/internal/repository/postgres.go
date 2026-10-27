@@ -804,3 +804,55 @@ func (r *PostgresRepo) inScope(ctx context.Context, t *domain.Task, scope string
 	return false
 }
 
+func (r *PostgresRepo) CreateBudgetReservation(ctx context.Context, res *domain.BudgetReservation) error {
+	query := `
+		INSERT INTO budget_reservations (
+			id, organization_id, execution_id, step_key, reserved_usd, reserved_tokens, status, expires_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+	`
+	_, err := r.db.ExecContext(ctx, query,
+		res.ID, res.OrganizationID, res.ExecutionID, res.StepKey,
+		res.ReservedUSD, res.ReservedTokens, res.Status, res.ExpiresAt,
+	)
+	return err
+}
+
+func (r *PostgresRepo) UpdateBudgetReservationStatus(ctx context.Context, id, status string) error {
+	query := `UPDATE budget_reservations SET status = $1 WHERE id = $2`
+	_, err := r.db.ExecContext(ctx, query, status, id)
+	return err
+}
+
+func (r *PostgresRepo) GetActiveBudgetReservations(ctx context.Context, employeeID string) (float64, error) {
+	query := `
+		SELECT COALESCE(SUM(br.reserved_usd), 0)
+		FROM budget_reservations br
+		JOIN executions e ON br.execution_id = e.id
+		WHERE e.executing_employee_id = $1
+		  AND br.status = 'ACTIVE'
+		  AND br.expires_at > now()
+	`
+	var total float64
+	err := r.db.QueryRowContext(ctx, query, employeeID).Scan(&total)
+	if err != nil {
+		return 0, err
+	}
+	return total, nil
+}
+
+func (r *PostgresRepo) RecordUsageLedger(ctx context.Context, entry *domain.UsageLedgerEntry) error {
+	query := `
+		INSERT INTO usage_ledger (
+			id, organization_id, execution_id, task_id, project_id, employee_id,
+			model_version_id, charge_reference, entry_type, posted_at,
+			input_tokens, output_tokens, cache_read_tokens, cost_usd
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+	`
+	_, err := r.db.ExecContext(ctx, query,
+		entry.ID, entry.OrganizationID, entry.ExecutionID, entry.TaskID, entry.ProjectID, entry.EmployeeID,
+		entry.ModelVersionID, entry.ChargeReference, entry.EntryType, entry.PostedAt,
+		entry.InputTokens, entry.OutputTokens, entry.CacheReadTokens, entry.CostUSD,
+	)
+	return err
+}
+
