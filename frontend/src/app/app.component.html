@@ -1,6 +1,11 @@
 <!-- LOGIN SCREEN -->
 <div class="login-container" *ngIf="!isAuthenticated">
   <div class="login-card">
+    <div class="login-top-bar">
+      <button type="button" class="btn mini theme-btn" (click)="toggleTheme()" [title]="theme === 'dark' ? 'Chuyển sang giao diện Sáng' : 'Chuyển sang giao diện Tối'">
+        {{ theme === 'dark' ? '☀️ Giao diện Sáng' : '🌙 Giao diện Tối' }}
+      </button>
+    </div>
     <div class="login-header">
       <div class="mark large">A</div>
       <div class="login-brand">
@@ -126,6 +131,10 @@
       </div>
       <div class="toolbar">
         <span class="scope-pill">◉ Enterprise Organization</span>
+        <button class="btn mini theme-btn" (click)="toggleTheme()" [title]="theme === 'dark' ? 'Chuyển sang giao diện Sáng' : 'Chuyển sang giao diện Tối'">
+          <span *ngIf="theme === 'dark'">☀️ Sáng</span>
+          <span *ngIf="theme === 'light'">🌙 Tối</span>
+        </button>
         <button class="btn mini primary" (click)="openCreateTaskModal()">＋ Giao việc</button>
         <button class="btn mini" (click)="openAuthModal()" title="Cấu hình Token">
           <span style="color:var(--green)">●</span>

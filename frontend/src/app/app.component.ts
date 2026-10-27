@@ -90,6 +90,9 @@ export class AppComponent implements OnInit, OnDestroy {
   loginLoading = false;
   loginError = '';
 
+  // Theme state: dark | light
+  theme: 'dark' | 'light' = 'dark';
+
   doLogin(): void {
     this.loginError = '';
     this.loginLoading = true;
@@ -178,6 +181,14 @@ export class AppComponent implements OnInit, OnDestroy {
   private toastTimer?: any;
 
   ngOnInit(): void {
+    const savedTheme = localStorage.getItem('abos_theme') as 'dark' | 'light' | null;
+    if (savedTheme === 'light' || savedTheme === 'dark') {
+      this.theme = savedTheme;
+    } else if (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
+      this.theme = 'light';
+    }
+    this.applyTheme(this.theme);
+
     if (this.isAuthenticated) {
       this.loadAllData();
       this.setupSSEListener();
@@ -191,6 +202,20 @@ export class AppComponent implements OnInit, OnDestroy {
           this.logout();
         }
       });
+    }
+  }
+
+  toggleTheme(): void {
+    this.theme = this.theme === 'dark' ? 'light' : 'dark';
+    localStorage.setItem('abos_theme', this.theme);
+    this.applyTheme(this.theme);
+    this.notify(this.theme === 'dark' ? 'Đã bật chế độ giao diện Tối' : 'Đã bật chế độ giao diện Sáng');
+  }
+
+  private applyTheme(t: 'dark' | 'light'): void {
+    if (typeof document !== 'undefined') {
+      document.documentElement.setAttribute('data-theme', t);
+      document.body.setAttribute('data-theme', t);
     }
   }
 

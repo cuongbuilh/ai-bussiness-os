@@ -7,6 +7,12 @@
   padding: 24px;
 }
 
+.login-top-bar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+
 .login-card {
   width: 100%;
   max-width: 440px;
@@ -159,4 +165,24 @@
   font-size: 12px;
   font-weight: 600;
   color: var(--text);
+}
+
+:host-context([data-theme="light"]) {
+  .login-container {
+    background: radial-gradient(circle at 50% 15%, rgba(37, 99, 235, 0.08) 0%, #f1f5f9 80%), var(--bg);
+  }
+  .login-card {
+    box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08), 0 2px 10px rgba(15, 23, 42, 0.04);
+  }
+  .tab-btn.active {
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
+  }
+  .demo-btn {
+    background: rgba(37, 99, 235, 0.06);
+    border: 1px dashed var(--blue);
+    color: var(--blue);
+  }
+  .demo-btn:hover {
+    background: rgba(37, 99, 235, 0.12);
+  }
 }
