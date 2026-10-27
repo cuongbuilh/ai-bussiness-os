@@ -290,12 +290,24 @@
               <ul>
                 <ng-template #renderNode let-node>
                   <li>
-                    <div class="org-node" (click)="openEmployeeDetail(node.id)">
-                      <div class="symbol">{{ node.kind === 'AI' ? '◈' : '◉' }}</div>
+                    <div class="org-node"
+                         [class.node-human]="node.kind === 'HUMAN'"
+                         [class.node-manager]="node.role === 'AI Manager' || node.role === 'Tech Lead'"
+                         (click)="openEmployeeDetail(node.id)"
+                         [attr.title]="'Bấm để xem chi tiết nhân sự: ' + node.name">
+                      <div class="org-node-header">
+                        <span class="symbol" [class.symbol-human]="node.kind === 'HUMAN'">{{ node.kind === 'AI' ? '◈' : '◉' }}</span>
+                        <span class="dept-badge">{{ node.department }}</span>
+                      </div>
                       <div class="name">{{ node.name }}</div>
                       <div class="role">{{ node.title }}</div>
-                      <div class="chip" style="margin-top:4px">{{ node.role }}</div>
-                      <div class="model">{{ node.model }}</div>
+                      <div class="chip node-chip">{{ node.role }}</div>
+                      <div class="model" *ngIf="node.kind === 'AI'">
+                        <span class="dot">●</span> {{ node.model }}
+                      </div>
+                      <div class="model model-human" *ngIf="node.kind === 'HUMAN'">
+                        <span class="dot dot-human">●</span> Executive
+                      </div>
                     </div>
                     <ul *ngIf="node.children && node.children.length > 0">
                       <ng-container *ngFor="let child of node.children">
@@ -307,6 +319,7 @@
                 <ng-container *ngTemplateOutlet="renderNode; context: { $implicit: orgTree }"></ng-container>
               </ul>
             </div>
+            <div class="empty" *ngIf="!orgTree">Đang tải sơ đồ tổ chức doanh nghiệp...</div>
           </div>
 
           <div class="note">

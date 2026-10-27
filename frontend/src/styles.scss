@@ -704,111 +704,237 @@ tr[data-id]:hover td, tr.clickable:hover td {
 /* Org Chart Tree */
 .org-scroll {
   overflow-x: auto;
-  padding: 24px 10px;
-  min-height: 380px;
+  overflow-y: hidden;
+  padding: 30px 20px;
+  min-height: 440px;
+  background: rgba(10, 20, 35, 0.4);
+  border-radius: var(--r);
+  display: block;
+}
+
+.tree {
+  width: max-content;
+  min-width: 100%;
+  display: flex;
+  justify-content: center;
 }
 
 .tree ul {
-  padding-top: 30px;
-  position: relative;
   display: flex;
   justify-content: center;
+  position: relative;
+  padding: 26px 0 0 0;
   margin: 0;
   padding-left: 0;
-  gap: 12px;
+  list-style: none;
+}
+
+/* Root level has no top connector */
+.tree > ul {
+  padding-top: 0;
 }
 
 .tree li {
-  list-style: none;
-  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   position: relative;
-  padding: 30px 6px 0;
+  padding: 26px 14px 0 14px;
+  list-style: none;
+  margin: 0;
 }
 
-.tree li::before, .tree li::after {
+/* Root li has no top connector */
+.tree > ul > li {
+  padding-top: 0;
+}
+.tree > ul > li::before,
+.tree > ul > li::after {
+  display: none !important;
+}
+
+/* Horizontal branch lines connecting siblings to the upward line */
+.tree li::before,
+.tree li::after {
   content: '';
   position: absolute;
   top: 0;
   right: 50%;
-  border-top: 1px solid #47607a;
+  border-top: 2px solid #3d5a7d;
   width: 50%;
-  height: 30px;
+  height: 26px;
 }
 
 .tree li::after {
   right: auto;
   left: 50%;
-  border-left: 1px solid #47607a;
+  border-left: 2px solid #3d5a7d;
+  margin-left: -1px;
 }
 
-.tree li:only-child::before, .tree li:only-child::after {
+/* Single child: no horizontal branches */
+.tree li:only-child::before,
+.tree li:only-child::after {
   display: none;
 }
-
 .tree li:only-child {
   padding-top: 0;
 }
 
-.tree li:first-child::before, .tree li:last-child::after {
-  border: 0;
+/* First child: no branch extending left, curve into vertical drop */
+.tree li:first-child::before {
+  border: 0 none;
 }
-
-.tree li:last-child::before {
-  border-right: 1px solid #47607a;
-  border-radius: 0 8px 0 0;
-}
-
 .tree li:first-child::after {
+  border-left: 2px solid #3d5a7d;
+  border-top: 2px solid #3d5a7d;
   border-radius: 8px 0 0 0;
 }
 
+/* Last child: no branch extending right, curve into vertical drop */
+.tree li:last-child::after {
+  border: 0 none;
+}
+.tree li:last-child::before {
+  border-top: 2px solid #3d5a7d;
+  border-right: 2px solid #3d5a7d;
+  margin-right: -1px;
+  border-radius: 0 8px 0 0;
+}
+
+/* Downward stem from parent node to the horizontal branch bar */
 .tree ul ul::before {
   content: '';
   position: absolute;
   top: 0;
   left: 50%;
-  border-left: 1px solid #47607a;
-  height: 30px;
+  margin-left: -1px;
+  border-left: 2px solid #3d5a7d;
+  width: 0;
+  height: 26px;
 }
 
+/* Org Card Styling */
 .org-node {
-  width: 170px;
-  padding: 13px 10px;
-  background: #162841;
-  border: 1px solid #3d5771;
+  width: 180px;
+  min-height: 125px;
+  padding: 12px 10px;
+  background: #14243b;
+  border: 1px solid #2e445f;
   border-radius: 12px;
   cursor: pointer;
   text-align: center;
-  box-shadow: 0 8px 25px #0002;
-  transition: all 0.15s ease-in-out;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-sizing: border-box;
 }
 
 .org-node:hover {
-  border-color: #60c9df;
-  background: #1e3751;
   transform: translateY(-2px);
+  border-color: #48c4d9;
+  background: #1a2f4d;
+  box-shadow: 0 12px 28px rgba(72, 196, 217, 0.22);
+}
+
+/* Founder / Human Node */
+.org-node.node-human {
+  border-color: #3b82f6;
+  background: linear-gradient(160deg, #162a4a 0%, #101e33 100%);
+  box-shadow: 0 8px 24px rgba(59, 130, 246, 0.2);
+}
+.org-node.node-human:hover {
+  border-color: #60a5fa;
+  box-shadow: 0 12px 30px rgba(96, 165, 250, 0.35);
+}
+
+/* Manager Node */
+.org-node.node-manager {
+  border-color: #38bdf8;
+}
+
+.org-node-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin-bottom: 6px;
+  padding: 0 2px;
+}
+
+.org-node .symbol {
+  font-size: 16px;
+  color: #48c4d9;
+  line-height: 1;
+}
+
+.org-node .symbol.symbol-human {
+  color: #60a5fa;
+  font-size: 17px;
+}
+
+.org-node .dept-badge {
+  font-size: 9px;
+  color: #8da4be;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 2px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 110px;
 }
 
 .org-node .name {
   font-size: 13px;
-  font-weight: 850;
-  line-height: 1.35;
+  font-weight: 800;
+  color: #e9f1fb;
+  line-height: 1.3;
+  margin-bottom: 2px;
 }
 
 .org-node .role {
   font-size: 11px;
-  color: #b1c7df;
-  margin: 5px 0;
+  color: #9cb2c8;
+  margin-bottom: 6px;
+  line-height: 1.25;
+}
+
+.org-node .node-chip {
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 100px;
+  background: rgba(40, 65, 95, 0.6);
+  border: 1px solid #2d4563;
+  color: #a3c3e8;
+  white-space: nowrap;
 }
 
 .org-node .model {
   font-size: 10px;
-  color: #64c7d6;
-  margin-top: 5px;
+  color: #48c4d9;
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
-.org-node .symbol {
-  font-size: 18px;
+.org-node .model .dot {
+  font-size: 8px;
+  color: #4ad19a;
+}
+
+.org-node .model.model-human {
+  color: #93c5fd;
+}
+
+.org-node .model .dot-human {
+  color: #3b82f6;
 }
 
 .empty {
