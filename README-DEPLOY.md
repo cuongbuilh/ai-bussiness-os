@@ -64,6 +64,51 @@ Khi chạy thành công:
 
 ---
 
+## 3. Xác thực & Đăng nhập Hệ thống (Authentication)
+
+Hệ thống bảo vệ toàn bộ các endpoint nghiệp vụ bằng cơ chế **Bearer Token Authentication** và cung cấp trang đăng nhập trực quan trên Web Console:
+
+### 3.1. Đăng nhập qua Web Console ([http://localhost:3000](http://localhost:3000))
+Khi truy cập Web Console lần đầu, hệ thống hiển thị màn hình đăng nhập bảo mật:
+- **Tài khoản mặc định (Founder / CEO):**
+  - Tên đăng nhập: `founder` (hoặc `admin`, `h1`)
+  - Mật khẩu: `founder123`
+  - Hoặc bấm nút **⚡ Đăng nhập nhanh tài khoản Founder / CEO** để tự động xác thực.
+- **Đăng nhập bằng Access Token:** Có thể chuyển sang tab *Access Token* để nhập trực tiếp token được cấp (ví dụ: `founder-h1-token`).
+- **Đăng xuất:** Trên thanh toolbar trên cùng, hiển thị huy hiệu người dùng hiện tại (ví dụ: `[FC] Founder / CEO`), nhấp vào nút **Đăng xuất** để xóa phiên làm việc và đóng luồng kết nối thời gian thực.
+
+### 3.2. Đăng nhập qua REST API
+```bash
+# 1. Đăng nhập lấy Bearer token
+curl -s -X POST http://localhost:8080/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"founder","password":"founder123"}'
+
+# Phản hồi mẫu:
+# {
+#   "token": "founder-h1-token",
+#   "user": {
+#     "id": "h1",
+#     "displayName": "Founder",
+#     "role": "Executive",
+#     "kind": "HUMAN",
+#     "title": "Founder / CEO"
+#   }
+# }
+
+# 2. Truy vấn thông tin người dùng hiện tại
+curl -s http://localhost:8080/api/v1/auth/me \
+  -H "Authorization: Bearer founder-h1-token"
+
+# 3. Sử dụng token cho các API điều hành (bắt buộc qua HTTP Header)
+curl -s http://localhost:8080/api/v1/tasks \
+  -H "Authorization: Bearer founder-h1-token"
+```
+
+> **Lưu ý bảo mật:** Token bắt buộc phải gửi qua header `Authorization: Bearer <token>`. Hệ thống từ chối mọi yêu cầu truyền token qua URL query parameter (`?token=...`) để triệt tiêu nguy cơ rò rỉ vào access log và proxy log. Mọi query parameter nhạy cảm đều được tự động redact thành `[REDACTED]` trong log máy chủ.
+
+---
+
 ## 3. Khởi chạy trong môi trường phát triển (Local Development)
 
 Nếu muốn chạy trực tiếp không qua Docker:

@@ -17,6 +17,8 @@ func qaRouter() http.Handler {
 	svc := service.NewServices(repository.NewMemoryRepo(), service.NewEventBroker())
 	h := handler.NewHandler(svc)
 	r := chi.NewRouter()
+	r.Post("/auth/login", h.Login)
+	r.Get("/auth/me", h.GetMe)
 	r.Get("/organization/org-chart", h.GetOrgChart)
 	r.Get("/departments", h.GetDepartments)
 	r.Get("/teams", h.GetTeams)

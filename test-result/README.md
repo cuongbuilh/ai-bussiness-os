@@ -6,7 +6,7 @@
 |---|---|---|
 | 10 ca QA-API-01…10 | **10 PASS** | [api-tests.jsonl](api-tests.jsonl) |
 | 7 unit test service | **7 PASS** | [full-go-tests.log](full-go-tests.log) |
-| 12 ca hồi quy QA-RV-01…12 | **12 PASS** | [reverification-tests.jsonl](reverification-tests.jsonl) |
+| 13 ca hồi quy QA-RV-01…13 | **13 PASS** | [reverification-tests.jsonl](reverification-tests.jsonl) |
 | 2 ca concurrency Postgres đa instance | **2 PASS** | [full-go-tests.log](full-go-tests.log) |
 | 21 ca Compose/PostgreSQL QA-CP-01…21 | **21 PASS, 0 FAIL** | [compose/results.json](compose/results.json) |
 | Angular production build | **PASS (0 token leak)** | [frontend-build.log](frontend-build.log) |
@@ -26,7 +26,7 @@ docker compose build
 python3 test-result/compose/evaluate.py
 ```
 
-Toàn bộ test suite Go đạt 100% PASS (31/31 unit & integration tests). Đánh giá 21 ca Compose/PostgreSQL đạt **21 PASS, 0 FAIL**.
+Toàn bộ test suite Go đạt 100% PASS (32/32 unit & integration tests). Đánh giá 21 ca Compose/PostgreSQL đạt **21 PASS, 0 FAIL**.
 
 ## Khắc phục chuyên sâu các lỗi bảo mật URL, rò rỉ token và đồng quy ghi đè chi phí
 

@@ -1,4 +1,79 @@
-<div class="app">
+<!-- LOGIN SCREEN -->
+<div class="login-container" *ngIf="!isAuthenticated">
+  <div class="login-card">
+    <div class="login-header">
+      <div class="mark large">A</div>
+      <div class="login-brand">
+        <h1>AI Business OS</h1>
+        <div class="login-badge">Control Plane v1.1</div>
+      </div>
+    </div>
+    <p class="login-desc">
+      Hệ thống điều hành doanh nghiệp tự động hóa với lực lượng nhân sự AI, quản trị ngân sách và quy trình phê duyệt thời gian thực.
+    </p>
+
+    <!-- Error Alert -->
+    <div class="login-alert" *ngIf="loginError">
+      <span>⚠️</span>
+      <div>{{ loginError }}</div>
+    </div>
+
+    <!-- Login Mode Tabs -->
+    <div class="login-tabs">
+      <button type="button" class="tab-btn" [class.active]="loginMode === 'password'" (click)="loginMode = 'password'">
+        Tài khoản & Mật khẩu
+      </button>
+      <button type="button" class="tab-btn" [class.active]="loginMode === 'token'" (click)="loginMode = 'token'">
+        Access Token
+      </button>
+    </div>
+
+    <!-- Password Form -->
+    <form *ngIf="loginMode === 'password'" (ngSubmit)="doLogin()" class="login-form">
+      <div class="formgroup">
+        <label>Tài khoản điều hành</label>
+        <input [(ngModel)]="loginUsername" name="username" class="input" placeholder="founder hoặc admin" required />
+      </div>
+
+      <div class="formgroup">
+        <label>Mật khẩu</label>
+        <input [(ngModel)]="loginPassword" name="password" type="password" class="input" placeholder="••••••••" required />
+      </div>
+
+      <div class="actions" style="margin-top: 24px;">
+        <button type="submit" class="btn primary login-submit-btn" [disabled]="loginLoading || !loginUsername || !loginPassword">
+          <span *ngIf="!loginLoading">Đăng nhập Command Center</span>
+          <span *ngIf="loginLoading">Đang xác thực...</span>
+        </button>
+      </div>
+    </form>
+
+    <!-- Token Form -->
+    <form *ngIf="loginMode === 'token'" (ngSubmit)="doLogin()" class="login-form">
+      <div class="formgroup">
+        <label>Bearer Access Token</label>
+        <input [(ngModel)]="loginTokenInput" name="token" class="input" placeholder="Nhập Bearer token được cấp..." required />
+      </div>
+
+      <div class="actions" style="margin-top: 24px;">
+        <button type="submit" class="btn primary login-submit-btn" [disabled]="loginLoading || !loginTokenInput">
+          <span *ngIf="!loginLoading">Xác thực bằng Token</span>
+          <span *ngIf="loginLoading">Đang xác thực...</span>
+        </button>
+      </div>
+    </form>
+
+    <!-- Quick Demo Helper -->
+    <div class="login-demo-box">
+      <div class="tiny muted" style="margin-bottom: 8px;">Tài khoản mặc định: <b>founder</b> / <b>founder123</b></div>
+      <button type="button" class="btn demo-btn" (click)="fillFounderDemo()">
+        ⚡ Đăng nhập nhanh tài khoản Founder / CEO
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="app" *ngIf="isAuthenticated">
   <!-- Sidebar -->
   <aside class="sidebar">
     <div class="brand">
@@ -52,12 +127,15 @@
       <div class="toolbar">
         <span class="scope-pill">◉ Enterprise Organization</span>
         <button class="btn mini primary" (click)="openCreateTaskModal()">＋ Giao việc</button>
-        <button class="btn mini" (click)="openAuthModal()" [title]="authToken ? 'Đã cài Bearer token' : 'Chưa cài Bearer token'">
-          <span *ngIf="authToken" style="color:var(--green)">●</span>
-          <span *ngIf="!authToken" style="color:var(--orange)">●</span>
+        <button class="btn mini" (click)="openAuthModal()" title="Cấu hình Token">
+          <span style="color:var(--green)">●</span>
           Token
         </button>
-        <div class="avatar" title="Founder / CEO">FC</div>
+        <div class="user-pill" [title]="currentUser?.title || 'Founder / CEO'">
+          <div class="avatar">{{ currentUser?.displayName?.slice(0, 2)?.toUpperCase() || 'FC' }}</div>
+          <span class="user-name">{{ currentUser?.displayName || 'Founder' }}</span>
+        </div>
+        <button class="btn mini" (click)="logout()" title="Đăng xuất khỏi hệ thống">Đăng xuất</button>
       </div>
     </header>
 

@@ -5,7 +5,8 @@ import { Subscription } from 'rxjs';
 import { ApiService } from './services/api.service';
 import {
   Department, Team, Employee, Project, Task,
-  Execution, ApprovalRequest, MCPServer, ModelInfo, OrgNode, BoardSummary
+  Execution, ApprovalRequest, MCPServer, ModelInfo, OrgNode, BoardSummary,
+  AuthUser
 } from './models/abos.models';
 
 type PageTab = 'overview' | 'organization' | 'board' | 'projects' | 'employees' | 'capabilities' | 'approvals';
@@ -74,10 +75,69 @@ export class AppComponent implements OnInit, OnDestroy {
 
   selectedProject: Project | null = null;
 
-  // Authentication configuration
+  // Authentication state & user session
   authToken = this.api.getAuthToken();
+  isAuthenticated = this.api.isAuthenticated();
+  currentUser: AuthUser | null = this.api.getCurrentUser();
   showAuthModal = false;
   inputToken = '';
+
+  // Login form state
+  loginUsername = 'founder';
+  loginPassword = 'founder123';
+  loginTokenInput = '';
+  loginMode: 'password' | 'token' = 'password';
+  loginLoading = false;
+  loginError = '';
+
+  doLogin(): void {
+    this.loginError = '';
+    this.loginLoading = true;
+
+    const payload = this.loginMode === 'password'
+      ? { username: this.loginUsername, password: this.loginPassword }
+      : { token: this.loginTokenInput.trim() };
+
+    this.api.login(payload).subscribe({
+      next: (res) => {
+        this.api.setAuthToken(res.token);
+        this.api.setCurrentUser(res.user);
+        this.currentUser = res.user;
+        this.authToken = res.token;
+        this.isAuthenticated = true;
+        this.loginLoading = false;
+        this.loadAllData();
+        this.setupSSEListener();
+        this.notify(`Đăng nhập thành công! Chào mừng ${res.user.displayName}`);
+      },
+      error: (err) => {
+        this.loginLoading = false;
+        this.loginError = err?.error?.error || 'Đăng nhập không thành công. Vui lòng kiểm tra lại thông tin.';
+      }
+    });
+  }
+
+  fillFounderDemo(): void {
+    this.loginMode = 'password';
+    this.loginUsername = 'founder';
+    this.loginPassword = 'founder123';
+    this.doLogin();
+  }
+
+  logout(): void {
+    this.api.clearAuthToken();
+    this.authToken = '';
+    this.currentUser = null;
+    this.isAuthenticated = false;
+    this.sseSub?.unsubscribe();
+    this.departments = [];
+    this.teams = [];
+    this.employees = [];
+    this.projects = [];
+    this.tasks = [];
+    this.approvals = [];
+    this.notify('Đã đăng xuất khỏi hệ thống điều hành.');
+  }
 
   openAuthModal(): void {
     this.inputToken = this.authToken;
@@ -96,12 +156,8 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   clearToken(): void {
-    this.api.clearAuthToken();
-    this.authToken = '';
-    this.inputToken = '';
+    this.logout();
     this.showAuthModal = false;
-    this.loadAllData();
-    this.notify('Đã xoá Bearer token.');
   }
 
   // New Task Form Modal
@@ -122,8 +178,20 @@ export class AppComponent implements OnInit, OnDestroy {
   private toastTimer?: any;
 
   ngOnInit(): void {
-    this.loadAllData();
-    this.setupSSEListener();
+    if (this.isAuthenticated) {
+      this.loadAllData();
+      this.setupSSEListener();
+      this.api.getMe().subscribe({
+        next: (u) => {
+          this.currentUser = u;
+          this.api.setCurrentUser(u);
+        },
+        error: () => {
+          // If token expired or invalid, reset session
+          this.logout();
+        }
+      });
+    }
   }
 
   ngOnDestroy(): void {

@@ -193,3 +193,16 @@ export interface BoardSummary {
   totalSpentUsd: number;
   projectsCount: number;
 }
+
+export interface AuthUser {
+  id: string;
+  displayName: string;
+  role: string;
+  kind: string;
+  title: string;
+}
+
+export interface LoginResponse {
+  token: string;
+  user: AuthUser;
+}

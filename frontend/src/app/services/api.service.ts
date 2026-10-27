@@ -3,7 +3,8 @@ import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
 import { Observable, Subject } from 'rxjs';
 import {
   Department, Team, Position, Employee, Project, Task,
-  Execution, ApprovalRequest, MCPServer, ModelInfo, OrgNode, BoardSummary
+  Execution, ApprovalRequest, MCPServer, ModelInfo, OrgNode, BoardSummary,
+  AuthUser, LoginResponse
 } from '../models/abos.models';
 
 @Injectable({
@@ -14,6 +15,7 @@ export class ApiService {
   // Default to relative /api/v1 (proxied by Nginx in Docker or Angular CLI dev proxy)
   private baseUrl = '/api/v1';
   private tokenKey = 'abos_token';
+  private userKey = 'abos_user';
 
   getAuthToken(): string {
     if (typeof localStorage === 'undefined') return '';
@@ -31,11 +33,46 @@ export class ApiService {
     this.restartSSE();
   }
 
+  getCurrentUser(): AuthUser | null {
+    if (typeof localStorage === 'undefined') return null;
+    const raw = localStorage.getItem(this.userKey);
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+
+  setCurrentUser(user: AuthUser | null): void {
+    if (typeof localStorage !== 'undefined') {
+      if (user) {
+        localStorage.setItem(this.userKey, JSON.stringify(user));
+      } else {
+        localStorage.removeItem(this.userKey);
+      }
+    }
+  }
+
+  isAuthenticated(): boolean {
+    return !!this.getAuthToken();
+  }
+
   clearAuthToken(): void {
     if (typeof localStorage !== 'undefined') {
       localStorage.removeItem(this.tokenKey);
+      localStorage.removeItem(this.userKey);
     }
     this.restartSSE();
+  }
+
+  // ---------------- Authentication ----------------
+  login(credentials: { username?: string; password?: string; token?: string }): Observable<LoginResponse> {
+    return this.http.post<LoginResponse>(`${this.baseUrl}/auth/login`, credentials);
+  }
+
+  getMe(): Observable<AuthUser> {
+    return this.http.get<AuthUser>(`${this.baseUrl}/auth/me`, { headers: this.headers });
   }
 
   private get headers(): HttpHeaders {

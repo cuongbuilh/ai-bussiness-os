@@ -1,6 +1,58 @@
 # AI Business OS — Internal Enterprise AI Workforce Platform
 
-**Spec version:** 1.1-confirmed-baseline | **Baseline date:** 2026-10-27 | **Language:** Vietnamese | **Status:** Implementation design, not production-complete source code.
+**Spec version:** 1.1-confirmed-baseline | **Baseline date:** 2026-10-27 | **Language:** Vietnamese | **Tech Stack:** Golang 1.24 + Angular 18 + PostgreSQL 16 + Docker Compose.
+
+---
+
+## 🚀 Khởi động nhanh bằng Docker Compose
+
+Hệ thống đã được đóng gói và cấu hình đầy đủ bằng Docker Compose:
+
+```bash
+# 1. Khởi chạy toàn bộ hệ thống (PostgreSQL, Golang Backend, Angular Web Console)
+docker compose up --build -d
+
+# 2. Kiểm tra trạng thái các container
+docker compose ps
+```
+
+| Dịch vụ | URL / Cổng kết nối | Mô tả |
+|---|---|---|
+| **Web Console** | [http://localhost:3000](http://localhost:3000) | Giao diện điều hành Angular SPA trực quan |
+| **Control Plane API** | [http://localhost:8080/api/v1](http://localhost:8080/api/v1) | Backend REST API và luồng SSE realtime |
+| **PostgreSQL Database** | `localhost:5432` | Cơ sở dữ liệu quan hệ (`abos_db`, user: `abos`) |
+
+---
+
+## 🔐 Hướng dẫn Đăng nhập & Xác thực (Authentication)
+
+Hệ thống hỗ trợ cơ chế xác thực Bearer token kết hợp trang đăng nhập thân thiện trên Web Console:
+
+### 1. Đăng nhập qua Web Console ([http://localhost:3000](http://localhost:3000))
+Truy cập trình duyệt tại `http://localhost:3000`:
+- **Tài khoản mặc định Founder / CEO:**
+  - **Tên đăng nhập:** `founder` (hoặc `admin`, `h1`)
+  - **Mật khẩu:** `founder123`
+  - Hoặc nhấp nút **⚡ Đăng nhập nhanh tài khoản Founder / CEO** để đăng nhập trực tiếp.
+- **Đăng nhập bằng Access Token:** Chuyển sang tab *Access Token* để nhập token tùy chỉnh.
+- **Đăng xuất:** Nhấp nút **Đăng xuất** cạnh tên người dùng trên thanh toolbar trên cùng.
+
+### 2. Đăng nhập qua REST API
+```bash
+# Đăng nhập nhận Bearer token và thông tin người dùng
+curl -s -X POST http://localhost:8080/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"founder","password":"founder123"}'
+
+# Phản hồi:
+# {"token":"founder-h1-token","user":{"id":"h1","displayName":"Founder","role":"Executive","kind":"HUMAN","title":"Founder / CEO"}}
+
+# Gọi API với token nhận được
+curl -s http://localhost:8080/api/v1/tasks \
+  -H "Authorization: Bearer founder-h1-token"
+```
+
+---
 
 ## Product intent
 Nền tảng vận hành doanh nghiệp nội bộ có 1..N nhân sự AI/người thật; sơ đồ quản lý trực tiếp; giao việc, dự án, team; MCP/tool/skills theo position và agent; ngân sách tiền/token/quota/thời gian/task; đánh giá nhân viên và benchmark model/provider; phê duyệt thay model; điều hành trực quan trên web.

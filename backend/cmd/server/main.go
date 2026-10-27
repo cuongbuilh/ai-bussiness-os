@@ -89,6 +89,10 @@ func main() {
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Get("/health", h.HealthCheck)
 
+		// Authentication
+		r.Post("/auth/login", h.Login)
+		r.Get("/auth/me", h.GetMe)
+
 		// Organization & Org Chart
 		r.Get("/organization/org-chart", h.GetOrgChart)
 		r.Get("/departments", h.GetDepartments)

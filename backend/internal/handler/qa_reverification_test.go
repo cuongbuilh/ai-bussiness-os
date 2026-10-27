@@ -255,3 +255,43 @@ func TestQA_RV_12_RejectURLQueryTokenAndRequireHeaderAuth(t *testing.T) {
 		t.Fatalf("SSE with Authorization header returned %d, expected 200", w.Code)
 	}
 }
+
+func TestQA_RV_13_AuthLoginAndGetMe(t *testing.T) {
+	r := qaRouter()
+
+	// 1. Successful login with founder credentials
+	code, data := qaCallWithAuthorization(t, r, "POST", "/auth/login", map[string]any{
+		"username": "founder",
+		"password": "founder123",
+	}, "")
+	if code != http.StatusOK || data["token"] == nil {
+		t.Fatalf("expected 200 with token, got %d %v", code, data)
+	}
+
+	token := data["token"].(string)
+	user, ok := data["user"].(map[string]any)
+	if !ok || user["id"] != "h1" {
+		t.Fatalf("expected user id h1, got %v", user)
+	}
+
+	// 2. Failed login with wrong password
+	code, _ = qaCallWithAuthorization(t, r, "POST", "/auth/login", map[string]any{
+		"username": "founder",
+		"password": "wrongpassword",
+	}, "")
+	if code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for wrong password, got %d", code)
+	}
+
+	// 3. GET /auth/me with valid Bearer token
+	code, meData := qaCallWithAuthorization(t, r, "GET", "/auth/me", nil, "Bearer "+token)
+	if code != http.StatusOK || meData["id"] != "h1" {
+		t.Fatalf("expected 200 with user h1, got %d %v", code, meData)
+	}
+
+	// 4. GET /auth/me without token
+	code, _ = qaCallWithAuthorization(t, r, "GET", "/auth/me", nil, "")
+	if code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for anonymous /auth/me, got %d", code)
+	}
+}
