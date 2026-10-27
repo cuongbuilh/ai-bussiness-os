@@ -479,9 +479,9 @@ func (s *Services) ExecuteTaskRun(ctx context.Context, taskID string) (*domain.E
 	exec.TotalCostUSD = totalCost
 	exec.TotalTokens = totalTokens
 
-	// Settle ledger & update employee spend and task cost
-	if err := s.Repo.UpdateBudgetReservationStatus(ctx, resID, "COMMITTED"); err != nil {
-		return nil, fmt.Errorf("failed to commit budget reservation: %w", err)
+	// Atomic delta commit: marks reservation committed and applies delta spend to employee and task
+	if err := s.Repo.CommitExecutionSpend(ctx, resID, emp.ID, task.ID, totalCost, domain.TaskStateInReview); err != nil {
+		return nil, fmt.Errorf("failed to commit execution spend: %w", err)
 	}
 
 	s.budgetMu.Lock()
@@ -494,16 +494,9 @@ func (s *Services) ExecuteTaskRun(ctx context.Context, taskID string) (*domain.E
 	s.budgetMu.Unlock()
 
 	emp.SpentUSD += totalCost
-	if err := s.Repo.UpdateEmployee(ctx, emp); err != nil {
-		return nil, fmt.Errorf("failed to persist employee spent: %w", err)
-	}
-
 	task.CostUSD += totalCost
 	task.ExecutionsCount++
-	task.Status = domain.TaskStateInReview // Ready for review!
-	if err := s.Repo.UpdateTask(ctx, task); err != nil {
-		return nil, fmt.Errorf("failed to persist task status: %w", err)
-	}
+	task.Status = domain.TaskStateInReview
 
 	if err := s.Repo.UpdateExecution(ctx, exec); err != nil {
 		return nil, fmt.Errorf("failed to persist execution: %w", err)

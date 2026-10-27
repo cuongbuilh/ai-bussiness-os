@@ -22,8 +22,8 @@
 --- PASS: TestQA_RV_10_PersistentBudgetReservationAndUsageLedger (0.00s)
 === RUN   TestQA_RV_11_RejectAnonymousReadsAndProjectCreate
 --- PASS: TestQA_RV_11_RejectAnonymousReadsAndProjectCreate (0.00s)
-=== RUN   TestQA_RV_12_SSEStreamAuthViaQueryParam
---- PASS: TestQA_RV_12_SSEStreamAuthViaQueryParam (0.00s)
+=== RUN   TestQA_RV_12_RejectURLQueryTokenAndRequireHeaderAuth
+--- PASS: TestQA_RV_12_RejectURLQueryTokenAndRequireHeaderAuth (0.00s)
 === RUN   TestQA_API_01_AnonymousEmployeeList
 --- PASS: TestQA_API_01_AnonymousEmployeeList (0.00s)
 === RUN   TestQA_API_02_UIFormCreatesTask
@@ -45,11 +45,13 @@
 === RUN   TestQA_API_10_RejectUnknownManager
 --- PASS: TestQA_API_10_RejectUnknownManager (0.00s)
 PASS
-ok  	github.com/cuongbuilh/ai-business-os/backend/internal/handler	0.008s
+ok  	github.com/cuongbuilh/ai-business-os/backend/internal/handler	0.007s
 === RUN   TestPostgres_MultiInstance_AtomicBudgetConcurrency
 --- PASS: TestPostgres_MultiInstance_AtomicBudgetConcurrency (0.03s)
+=== RUN   TestPostgres_MultiInstance_ConcurrentSpendCommit
+--- PASS: TestPostgres_MultiInstance_ConcurrentSpendCommit (0.03s)
 PASS
-ok  	github.com/cuongbuilh/ai-business-os/backend/internal/repository	0.036s
+ok  	github.com/cuongbuilh/ai-business-os/backend/internal/repository	0.067s
 === RUN   TestOrgChartAndHierarchy
 --- PASS: TestOrgChartAndHierarchy (0.00s)
 === RUN   TestBR_ORG_002_SelfReportingPrevented
@@ -65,4 +67,4 @@ ok  	github.com/cuongbuilh/ai-business-os/backend/internal/repository	0.036s
 === RUN   TestScopeFiltering
 --- PASS: TestScopeFiltering (0.00s)
 PASS
-ok  	github.com/cuongbuilh/ai-business-os/backend/internal/service	0.005s
+ok  	github.com/cuongbuilh/ai-business-os/backend/internal/service	0.003s

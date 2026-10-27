@@ -855,7 +855,7 @@
       </p>
       <div class="formgroup" style="margin-top: 16px;">
         <label>Bearer Token</label>
-        <input [(ngModel)]="inputToken" class="input" placeholder="Ví dụ: abos-token hoặc abos-system-token" (keyup.enter)="saveToken()" />
+        <input [(ngModel)]="inputToken" class="input" placeholder="Nhập Bearer token được cấp..." (keyup.enter)="saveToken()" />
       </div>
       <div class="actions" style="margin-top: 20px; display: flex; justify-content: space-between;">
         <button type="button" class="btn" *ngIf="authToken" (click)="clearToken()">Xóa token</button>

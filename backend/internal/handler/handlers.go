@@ -38,22 +38,23 @@ func (h *Handler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) authenticate(r *http.Request) (string, error) {
+	// Security: Credentials MUST strictly be transmitted via HTTP Authorization header.
+	// Query parameter tokens (?token=...) are rejected to prevent credential leakage in URL logs/proxies.
 	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		return "", fmt.Errorf("missing authorization header")
+	}
+
+	parts := strings.SplitN(authHeader, " ", 2)
 	var token string
-	if authHeader != "" {
-		parts := strings.SplitN(authHeader, " ", 2)
-		if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
-			token = strings.TrimSpace(parts[1])
-		} else {
-			token = strings.TrimSpace(authHeader)
-		}
+	if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
+		token = strings.TrimSpace(parts[1])
 	} else {
-		// Support query parameter for SSE EventSource
-		token = strings.TrimSpace(r.URL.Query().Get("token"))
+		token = strings.TrimSpace(authHeader)
 	}
 
 	if token == "" {
-		return "", fmt.Errorf("missing authorization header or token")
+		return "", fmt.Errorf("empty authorization token")
 	}
 
 	lower := strings.ToLower(token)

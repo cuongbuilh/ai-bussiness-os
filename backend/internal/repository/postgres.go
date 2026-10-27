@@ -854,6 +854,42 @@ func (r *PostgresRepo) AtomicReserveBudget(ctx context.Context, res *domain.Budg
 	return tx.Commit()
 }
 
+func (r *PostgresRepo) CommitExecutionSpend(ctx context.Context, resID, employeeID, taskID string, costUSD float64, taskStatus domain.TaskState) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin commit tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	// 1. Mark budget reservation as COMMITTED
+	_, err = tx.ExecContext(ctx, "UPDATE budget_reservations SET status = 'COMMITTED' WHERE id = $1", resID)
+	if err != nil {
+		return fmt.Errorf("failed to commit budget reservation: %w", err)
+	}
+
+	// 2. Atomic delta increment on employee spent_usd (never overwrites concurrent spend)
+	_, err = tx.ExecContext(ctx, "UPDATE employees SET spent_usd = spent_usd + $1, version = version + 1 WHERE id = $2", costUSD, employeeID)
+	if err != nil {
+		return fmt.Errorf("failed to increment employee spent: %w", err)
+	}
+
+	// 3. Atomic delta increment on task cost_usd and execs_count
+	_, err = tx.ExecContext(ctx, `
+		UPDATE tasks SET
+			cost_usd = cost_usd + $1,
+			execs_count = execs_count + 1,
+			status = $2,
+			updated_at = now(),
+			version = version + 1
+		WHERE id = $3
+	`, costUSD, taskStatus, taskID)
+	if err != nil {
+		return fmt.Errorf("failed to increment task cost: %w", err)
+	}
+
+	return tx.Commit()
+}
+
 func (r *PostgresRepo) CreateBudgetReservation(ctx context.Context, res *domain.BudgetReservation) error {
 	query := `
 		INSERT INTO budget_reservations (

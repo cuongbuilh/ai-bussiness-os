@@ -51,6 +51,26 @@ func main() {
 	// Middlewares
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
+	// Sanitize sensitive query parameters (token, secret, key, password) before logger to prevent log leakage
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if q := r.URL.Query(); len(q) > 0 {
+				sensitiveKeys := []string{"token", "secret", "key", "password", "auth", "authorization"}
+				redacted := false
+				for _, k := range sensitiveKeys {
+					if q.Has(k) {
+						q.Set(k, "[REDACTED]")
+						redacted = true
+					}
+				}
+				if redacted {
+					r.URL.RawQuery = q.Encode()
+					r.RequestURI = r.URL.RequestURI()
+				}
+			}
+			next.ServeHTTP(w, r)
+		})
+	})
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(60 * time.Second))

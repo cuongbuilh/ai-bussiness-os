@@ -49,7 +49,8 @@ export class ApiService {
   }
 
   private sseEvent$ = new Subject<{ type: string; action: string; payload: any }>();
-  private eventSource: EventSource | null = null;
+  private abortController: AbortController | null = null;
+  private sseRetryTimer: any = null;
 
   constructor() {
     this.initSSE();
@@ -60,61 +61,74 @@ export class ApiService {
   }
 
   restartSSE(): void {
-    if (this.eventSource) {
-      this.eventSource.close();
-      this.eventSource = null;
-    }
     this.initSSE();
   }
 
-  private initSSE(): void {
-    if (typeof EventSource === 'undefined') return;
+  private async initSSE(): Promise<void> {
+    if (typeof window === 'undefined' || typeof fetch === 'undefined') return;
 
-    if (this.eventSource) {
-      this.eventSource.close();
-      this.eventSource = null;
+    if (this.abortController) {
+      this.abortController.abort();
+      this.abortController = null;
+    }
+    if (this.sseRetryTimer) {
+      clearTimeout(this.sseRetryTimer);
+      this.sseRetryTimer = null;
     }
 
+    const token = this.getAuthToken();
+    if (!token) {
+      return;
+    }
+
+    this.abortController = new AbortController();
+
     try {
-      const token = this.getAuthToken();
-      const url = token ? `${this.baseUrl}/boards/stream?token=${encodeURIComponent(token)}` : `${this.baseUrl}/boards/stream`;
-      this.eventSource = new EventSource(url);
-      
-      this.eventSource.onopen = () => {
-        // F-08: On initial connect or reconnect, emit refetch event to refresh snapshot
-        this.sseEvent$.next({ type: 'system', action: 'refetch_snapshot', payload: null });
-      };
+      // Secure SSE connection passing token strictly via HTTP Authorization header (never in URL)
+      const response = await fetch(`${this.baseUrl}/boards/stream`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'text/event-stream'
+        },
+        signal: this.abortController.signal
+      });
 
-      this.eventSource.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          this.sseEvent$.next(data);
-        } catch {
-          // ignore ping
-        }
-      };
-
-      const eventTypes = ['task', 'employee', 'project', 'approval', 'execution'];
-      for (const t of eventTypes) {
-        this.eventSource.addEventListener(t, (e: MessageEvent) => {
-          try {
-            const data = JSON.parse(e.data);
-            this.sseEvent$.next(data);
-          } catch (err) {
-            console.error('SSE parse error:', err);
-          }
-        });
+      if (!response.ok || !response.body) {
+        this.sseRetryTimer = setTimeout(() => this.initSSE(), 5000);
+        return;
       }
 
-      this.eventSource.onerror = () => {
-        // Retry after delay and refetch on reconnect
-        if (this.eventSource) {
-          this.eventSource.close();
-          setTimeout(() => this.initSSE(), 4000);
+      // F-08: On initial connect or reconnect, emit refetch event to refresh snapshot
+      this.sseEvent$.next({ type: 'system', action: 'refetch_snapshot', payload: null });
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const blocks = buffer.split('\n\n');
+        buffer = blocks.pop() || '';
+
+        for (const block of blocks) {
+          const match = block.match(/data:\s*(.+)/);
+          if (match) {
+            try {
+              const data = JSON.parse(match[1]);
+              this.sseEvent$.next(data);
+            } catch {
+              // ignore ping or non-json message
+            }
+          }
         }
-      };
-    } catch (e) {
-      console.warn('Could not connect SSE stream:', e);
+      }
+    } catch (err: any) {
+      if (err?.name !== 'AbortError') {
+        this.sseRetryTimer = setTimeout(() => this.initSSE(), 5000);
+      }
     }
   }
 

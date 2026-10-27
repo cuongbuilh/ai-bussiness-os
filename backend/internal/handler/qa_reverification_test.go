@@ -223,11 +223,24 @@ func TestQA_RV_11_RejectAnonymousReadsAndProjectCreate(t *testing.T) {
 	}
 }
 
-func TestQA_RV_12_SSEStreamAuthViaQueryParam(t *testing.T) {
+func TestQA_RV_12_RejectURLQueryTokenAndRequireHeaderAuth(t *testing.T) {
 	r := qaRouter()
 
-	// SSE with query param token should be authorized
-	req := httptest.NewRequest("GET", "/boards/stream?token=founder-h1-token", nil)
+	// 1. Passing token via query parameter on normal endpoints must be rejected (prevents log leakage)
+	code, _ := qaCallWithAuthorization(t, r, "GET", "/tasks?token=founder-h1-token", nil, "")
+	if code != http.StatusUnauthorized && code != http.StatusForbidden {
+		t.Fatalf("URL query parameter token accepted on /tasks: HTTP %d (expected 401)", code)
+	}
+
+	// 2. Passing token via query parameter on SSE stream must also be rejected
+	code, _ = qaCallWithAuthorization(t, r, "GET", "/boards/stream?token=founder-h1-token", nil, "")
+	if code != http.StatusUnauthorized && code != http.StatusForbidden {
+		t.Fatalf("URL query parameter token accepted on /boards/stream: HTTP %d (expected 401)", code)
+	}
+
+	// 3. SSE stream with standard HTTP Authorization header must succeed
+	req := httptest.NewRequest("GET", "/boards/stream", nil)
+	req.Header.Set("Authorization", "Bearer founder-h1-token")
 	ctx, cancel := context.WithCancel(req.Context())
 	req = req.WithContext(ctx)
 	w := httptest.NewRecorder()
@@ -239,6 +252,6 @@ func TestQA_RV_12_SSEStreamAuthViaQueryParam(t *testing.T) {
 
 	r.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
-		t.Fatalf("SSE with query param token returned %d, expected 200", w.Code)
+		t.Fatalf("SSE with Authorization header returned %d, expected 200", w.Code)
 	}
 }

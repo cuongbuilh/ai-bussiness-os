@@ -140,3 +140,120 @@ func TestPostgres_MultiInstance_AtomicBudgetConcurrency(t *testing.T) {
 		t.Fatalf("Multi-instance budget cap failed! Expected 1 success, 1 failure, got %d successes, %d failures", successes, failures)
 	}
 }
+
+func TestPostgres_MultiInstance_ConcurrentSpendCommit(t *testing.T) {
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		dbURL = "postgres://abos:abos_secret@localhost:5432/abos_qa_20261027?sslmode=disable"
+	}
+
+	repo1, err := repository.NewPostgresRepo(dbURL)
+	if err != nil {
+		t.Skipf("Skipping live postgres concurrency test: %v", err)
+		return
+	}
+	repo2, err := repository.NewPostgresRepo(dbURL)
+	if err != nil {
+		t.Skipf("Skipping live postgres concurrency test: %v", err)
+		return
+	}
+
+	ctx := context.Background()
+	testEmpID := fmt.Sprintf("qa-spend-%s", uuid.New().String()[:8])
+	managerID := "h1"
+
+	emp := &domain.Employee{
+		ID:             testEmpID,
+		OrganizationID: "org-default",
+		DisplayName:    "QA Spend Agent",
+		Role:           "QA Concurrency Tester",
+		Kind:           "AI",
+		ManagerID:      &managerID,
+		BudgetUSD:      10.0,
+		SpentUSD:       0.0,
+		State:          domain.EmployeeStateActive,
+	}
+	if err := repo1.CreateEmployee(ctx, emp); err != nil {
+		t.Fatalf("failed to create test employee: %v", err)
+	}
+
+	taskID := fmt.Sprintf("T-SP-%s", uuid.New().String()[:6])
+	task := &domain.Task{
+		ID:                 taskID,
+		OrganizationID:     "org-default",
+		Title:              "QA Concurrent Spend Task",
+		AccountableOwnerID: testEmpID,
+		Status:             domain.TaskStateInProgress,
+		Priority:           "HIGH",
+		CostUSD:            0.0,
+		ExecutionsCount:    0,
+	}
+	if err := repo1.CreateTask(ctx, task); err != nil {
+		t.Fatalf("failed to create test task: %v", err)
+	}
+
+	// Create 2 executions and 2 reservations
+	res1ID := fmt.Sprintf("res-c1-%s", uuid.New().String()[:6])
+	res2ID := fmt.Sprintf("res-c2-%s", uuid.New().String()[:6])
+	exec1ID := fmt.Sprintf("exec-c1-%s", uuid.New().String()[:6])
+	exec2ID := fmt.Sprintf("exec-c2-%s", uuid.New().String()[:6])
+	now := time.Now()
+
+	_ = repo1.CreateExecution(ctx, &domain.Execution{
+		ID: exec1ID, OrganizationID: "org-default", TaskID: taskID, ExecutingEmployeeID: testEmpID,
+		Status: domain.ExecutionStateRunning, AttemptNo: 1, IdempotencyKey: uuid.New().String(), CreatedAt: now,
+	})
+	_ = repo2.CreateExecution(ctx, &domain.Execution{
+		ID: exec2ID, OrganizationID: "org-default", TaskID: taskID, ExecutingEmployeeID: testEmpID,
+		Status: domain.ExecutionStateRunning, AttemptNo: 2, IdempotencyKey: uuid.New().String(), CreatedAt: now,
+	})
+
+	_ = repo1.CreateBudgetReservation(ctx, &domain.BudgetReservation{
+		ID: res1ID, OrganizationID: "org-default", ExecutionID: exec1ID, StepKey: "s1",
+		ReservedUSD: 0.24, Status: "ACTIVE", ExpiresAt: now.Add(5 * time.Minute),
+	})
+	_ = repo2.CreateBudgetReservation(ctx, &domain.BudgetReservation{
+		ID: res2ID, OrganizationID: "org-default", ExecutionID: exec2ID, StepKey: "s2",
+		ReservedUSD: 0.35, Status: "ACTIVE", ExpiresAt: now.Add(5 * time.Minute),
+	})
+
+	// Concurrently commit execution 1 (cost $0.24) and execution 2 (cost $0.35)
+	var wg sync.WaitGroup
+	var err1, err2 error
+
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		err1 = repo1.CommitExecutionSpend(ctx, res1ID, testEmpID, taskID, 0.24, domain.TaskStateInReview)
+	}()
+	go func() {
+		defer wg.Done()
+		err2 = repo2.CommitExecutionSpend(ctx, res2ID, testEmpID, taskID, 0.35, domain.TaskStateInReview)
+	}()
+	wg.Wait()
+
+	if err1 != nil || err2 != nil {
+		t.Fatalf("CommitExecutionSpend returned error: err1=%v, err2=%v", err1, err2)
+	}
+
+	// Verify that spend was atomically accumulated without overwriting
+	savedEmp, err := repo1.GetEmployeeByID(ctx, testEmpID)
+	if err != nil {
+		t.Fatalf("failed to reload employee: %v", err)
+	}
+	expectedSpend := 0.59
+	if diff := savedEmp.SpentUSD - expectedSpend; diff < -0.001 || diff > 0.001 {
+		t.Fatalf("Employee spent_usd overwritten! Expected %.2f, got %.2f", expectedSpend, savedEmp.SpentUSD)
+	}
+
+	savedTask, err := repo1.GetTaskByID(ctx, taskID)
+	if err != nil {
+		t.Fatalf("failed to reload task: %v", err)
+	}
+	if diff := savedTask.CostUSD - expectedSpend; diff < -0.001 || diff > 0.001 {
+		t.Fatalf("Task cost_usd overwritten! Expected %.2f, got %.2f", expectedSpend, savedTask.CostUSD)
+	}
+	if savedTask.ExecutionsCount != 2 {
+		t.Fatalf("Task execs_count overwritten! Expected 2, got %d", savedTask.ExecutionsCount)
+	}
+}

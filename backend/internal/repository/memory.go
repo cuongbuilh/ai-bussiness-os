@@ -673,6 +673,33 @@ func (r *MemoryRepo) AtomicReserveBudget(ctx context.Context, res *domain.Budget
 	return nil
 }
 
+func (r *MemoryRepo) CommitExecutionSpend(ctx context.Context, resID, employeeID, taskID string, costUSD float64, taskStatus domain.TaskState) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if res, ok := r.reservations[resID]; ok {
+		res.Status = "COMMITTED"
+		r.reservations[resID] = res
+	}
+
+	if emp, ok := r.employees[employeeID]; ok {
+		emp.SpentUSD += costUSD
+		emp.Version++
+		r.employees[employeeID] = emp
+	}
+
+	if task, ok := r.tasks[taskID]; ok {
+		task.CostUSD += costUSD
+		task.ExecutionsCount++
+		task.Status = taskStatus
+		task.UpdatedAt = time.Now()
+		task.Version++
+		r.tasks[taskID] = task
+	}
+
+	return nil
+}
+
 func (r *MemoryRepo) CreateBudgetReservation(ctx context.Context, res *domain.BudgetReservation) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
