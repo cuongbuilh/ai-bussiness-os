@@ -1,0 +1,17 @@
+?   	github.com/cuongbuilh/ai-business-os/backend/cmd/server	[no test files]
+?   	github.com/cuongbuilh/ai-business-os/backend/internal/domain	[no test files]
+--- FAIL: TestQA_RV_01_RejectForgedBearerToken (0.00s)
+    qa_reverification_test.go:60: forged bearer token accepted: HTTP 200
+--- FAIL: TestQA_RV_02_RejectSpoofedApprovalActor (0.00s)
+    qa_reverification_test.go:67: forged token approved as founder: HTTP 200
+--- FAIL: TestQA_RV_03_RejectAnonymousInReviewAcceptance (0.00s)
+    qa_reverification_test.go:74: anonymous acceptance succeeded: HTTP 200
+--- FAIL: TestQA_RV_04_RejectReadyToCompletedJump (0.00s)
+    qa_reverification_test.go:83: READY to COMPLETED jump accepted: HTTP 200, status=completed
+--- FAIL: TestQA_RV_05_ConcurrentBudgetNeverExceedsCap (0.00s)
+    qa_reverification_test.go:116: cap $0.37 admitted 2 concurrent runs
+FAIL
+FAIL	github.com/cuongbuilh/ai-business-os/backend/internal/handler	0.004s
+?   	github.com/cuongbuilh/ai-business-os/backend/internal/repository	[no test files]
+ok  	github.com/cuongbuilh/ai-business-os/backend/internal/service	0.003s
+FAIL

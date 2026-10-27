@@ -1,0 +1,204 @@
+[
+  {
+    "id": "QA-CP-01",
+    "status": "PASS",
+    "expected": "HTTP 200 and status=ok",
+    "actual": "HTTP 200; ok",
+    "requirements": [
+      "NFR-REL-001"
+    ]
+  },
+  {
+    "id": "QA-CP-02",
+    "status": "PASS",
+    "expected": "Postgres seed: 9 employees, 15 tasks, 3 projects; API 15 distinct tasks",
+    "actual": "DB {'employees': '9', 'projects': '3', 'tasks': '15'}; API 15 tasks, 15 IDs",
+    "requirements": [
+      "FR-WORK-004",
+      "AT-03"
+    ]
+  },
+  {
+    "id": "QA-CP-03",
+    "status": "PASS",
+    "expected": "Project p1 returns exactly its 6 task IDs",
+    "actual": "HTTP 200; IDs=['T-101', 'T-102', 'T-103', 'T-104', 'T-105', 'T-106']",
+    "requirements": [
+      "AT-04"
+    ]
+  },
+  {
+    "id": "QA-CP-04",
+    "status": "PASS",
+    "expected": "Team insights sees six seeded linked tasks",
+    "actual": "HTTP 200; IDs=['T-107', 'T-108', 'T-109', 'T-110', 'T-111', 'T-115']",
+    "requirements": [
+      "AT-03",
+      "AT-04"
+    ]
+  },
+  {
+    "id": "QA-CP-05",
+    "status": "PASS",
+    "expected": "Project summary count=6, accepted=1, spent=18.00",
+    "actual": "HTTP 200; {'totalTasks': 6, 'activeTasks': 2, 'acceptedTasks': 1, 'blockedTasks': 1, 'backlogTasks': 0, 'totalSpentUsd': 18.000000000000004, 'projectsCount': 1}",
+    "requirements": [
+      "AT-04",
+      "AT-19"
+    ]
+  },
+  {
+    "id": "QA-CP-06",
+    "status": "FAIL",
+    "expected": "HTTP 401/403",
+    "actual": "HTTP 200",
+    "requirements": [
+      "FR-SEC-001"
+    ]
+  },
+  {
+    "id": "QA-CP-07",
+    "status": "FAIL",
+    "expected": "HTTP 401/403",
+    "actual": "HTTP 200",
+    "requirements": [
+      "AT-17"
+    ]
+  },
+  {
+    "id": "QA-CP-08",
+    "status": "FAIL",
+    "expected": "HTTP 401/403",
+    "actual": "HTTP 200",
+    "requirements": [
+      "FR-SEC-001"
+    ]
+  },
+  {
+    "id": "QA-CP-09",
+    "status": "FAIL",
+    "expected": "Malformed/unauthorized scope rejected with HTTP 400/403",
+    "actual": "HTTP 200; body=None",
+    "requirements": [
+      "BR-WORK-007"
+    ]
+  },
+  {
+    "id": "QA-CP-10",
+    "status": "FAIL",
+    "expected": "company:anything is not an authorized all-company scope",
+    "actual": "HTTP 200; task count=15",
+    "requirements": [
+      "BR-WORK-007"
+    ]
+  },
+  {
+    "id": "QA-CP-11",
+    "status": "FAIL",
+    "expected": "Postgres has reservation and immutable usage ledger tables",
+    "actual": "missing=['budget_accounts', 'budget_reservations', 'usage_ledger']",
+    "requirements": [
+      "FR-BUD-001",
+      "FR-BUD-002",
+      "AT-07",
+      "AT-08"
+    ]
+  },
+  {
+    "id": "QA-CP-12",
+    "status": "FAIL",
+    "expected": "Docker frontend image builds with npm ci",
+    "actual": "npm ci lockfile mismatch",
+    "requirements": [
+      "C-08",
+      "08-delivery release gate"
+    ]
+  },
+  {
+    "id": "QA-CP-13",
+    "status": "PASS",
+    "expected": "Task created by API persists in separate PostgreSQL QA database",
+    "actual": "POST 201; GET 200; id=T-6577",
+    "requirements": [
+      "FR-WORK-006",
+      "AT-05"
+    ]
+  },
+  {
+    "id": "QA-CP-14",
+    "status": "FAIL",
+    "expected": "Create response returns persisted organization, timestamp, version",
+    "actual": "POST org=, createdAt=0001-01-01T00:00:00Z, version=0; GET org=org-default, version=1",
+    "requirements": [
+      "FR-WORK-006"
+    ]
+  },
+  {
+    "id": "QA-CP-15",
+    "status": "PASS",
+    "expected": "Unknown manager rejected in PostgreSQL",
+    "actual": "HTTP 400",
+    "requirements": [
+      "BR-ORG-001",
+      "AT-02"
+    ]
+  },
+  {
+    "id": "QA-CP-16",
+    "status": "PASS",
+    "expected": "BACKLOG accept and direct ACCEPTED patch rejected",
+    "actual": "accept=400; patch=400",
+    "requirements": [
+      "BR-WORK-003",
+      "AT-16"
+    ]
+  },
+  {
+    "id": "QA-CP-17",
+    "status": "FAIL",
+    "expected": "READY to COMPLETED jump rejected",
+    "actual": "HTTP 200",
+    "requirements": [
+      "BR-WORK-006"
+    ]
+  },
+  {
+    "id": "QA-CP-18",
+    "status": "FAIL",
+    "expected": "Anonymous in-review acceptance rejected",
+    "actual": "HTTP 200",
+    "requirements": [
+      "BR-WORK-003",
+      "AT-16"
+    ]
+  },
+  {
+    "id": "QA-CP-19",
+    "status": "FAIL",
+    "expected": "Forged token cannot approve as Founder",
+    "actual": "HTTP 200",
+    "requirements": [
+      "BR-AUTH-001",
+      "AT-22"
+    ]
+  },
+  {
+    "id": "QA-CP-20",
+    "status": "PASS",
+    "expected": "Single run estimated over $0.10 cap denied, spent stays zero",
+    "actual": "HTTP 400; spent=0",
+    "requirements": [
+      "BR-BUD-003"
+    ]
+  },
+  {
+    "id": "QA-CP-21",
+    "status": "FAIL",
+    "expected": "Three concurrent create-task requests get distinct IDs",
+    "actual": "HTTP statuses=[201, 400, 400]; errors=[None, 'pq: duplicate key value violates unique constraint \"tasks_pkey\" (23505)', 'pq: duplicate key value violates unique constraint \"tasks_pkey\" (23505)']",
+    "requirements": [
+      "FR-WORK-002",
+      "FR-WORK-006"
+    ]
+  }
+]

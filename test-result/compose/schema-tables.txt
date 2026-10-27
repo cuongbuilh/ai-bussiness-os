@@ -1,0 +1,11 @@
+approval_requests
+departments
+employees
+executions
+mcp_servers
+model_versions
+organizations
+positions
+projects
+tasks
+teams
