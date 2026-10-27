@@ -52,6 +52,11 @@
       <div class="toolbar">
         <span class="scope-pill">◉ Enterprise Organization</span>
         <button class="btn mini primary" (click)="openCreateTaskModal()">＋ Giao việc</button>
+        <button class="btn mini" (click)="openAuthModal()" [title]="authToken ? 'Đã cài Bearer token' : 'Chưa cài Bearer token'">
+          <span *ngIf="authToken" style="color:var(--green)">●</span>
+          <span *ngIf="!authToken" style="color:var(--orange)">●</span>
+          Token
+        </button>
         <div class="avatar" title="Founder / CEO">FC</div>
       </div>
     </header>
@@ -838,6 +843,27 @@
           <button type="submit" class="btn primary">Tạo công việc</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- AUTH TOKEN CONFIG MODAL -->
+  <div class="modal-layer modal-center" *ngIf="showAuthModal" (click)="showAuthModal = false">
+    <div class="dialog" (click)="$event.stopPropagation()" style="max-width: 480px;">
+      <div class="card-title">Cấu hình Bearer Token</div>
+      <p class="section-sub" style="margin-top: 6px;">
+        Hệ thống yêu cầu Bearer token để gọi các API điều hành (control plane). Token sẽ được lưu trong localStorage của trình duyệt client.
+      </p>
+      <div class="formgroup" style="margin-top: 16px;">
+        <label>Bearer Token</label>
+        <input [(ngModel)]="inputToken" class="input" placeholder="Ví dụ: abos-token hoặc abos-system-token" (keyup.enter)="saveToken()" />
+      </div>
+      <div class="actions" style="margin-top: 20px; display: flex; justify-content: space-between;">
+        <button type="button" class="btn" *ngIf="authToken" (click)="clearToken()">Xóa token</button>
+        <div style="display: flex; gap: 8px; margin-left: auto;">
+          <button type="button" class="btn" (click)="showAuthModal = false">Đóng</button>
+          <button type="button" class="btn primary" (click)="saveToken()">Lưu token</button>
+        </div>
+      </div>
     </div>
   </div>
 

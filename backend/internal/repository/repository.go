@@ -48,6 +48,7 @@ type Repository interface {
 	GetBoardSummary(ctx context.Context, scope string) (*domain.BoardSummary, error)
 
 	// Budget & Ledger
+	AtomicReserveBudget(ctx context.Context, res *domain.BudgetReservation, employeeID string, estimatedCost float64) error
 	CreateBudgetReservation(ctx context.Context, res *domain.BudgetReservation) error
 	UpdateBudgetReservationStatus(ctx context.Context, id, status string) error
 	GetActiveBudgetReservations(ctx context.Context, employeeID string) (float64, error)

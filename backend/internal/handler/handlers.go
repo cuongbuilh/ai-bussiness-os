@@ -39,19 +39,21 @@ func (h *Handler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) authenticate(r *http.Request) (string, error) {
 	authHeader := r.Header.Get("Authorization")
-	if authHeader == "" {
-		return "", fmt.Errorf("missing authorization header")
-	}
-	parts := strings.SplitN(authHeader, " ", 2)
 	var token string
-	if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
-		token = strings.TrimSpace(parts[1])
+	if authHeader != "" {
+		parts := strings.SplitN(authHeader, " ", 2)
+		if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
+			token = strings.TrimSpace(parts[1])
+		} else {
+			token = strings.TrimSpace(authHeader)
+		}
 	} else {
-		token = strings.TrimSpace(authHeader)
+		// Support query parameter for SSE EventSource
+		token = strings.TrimSpace(r.URL.Query().Get("token"))
 	}
 
 	if token == "" {
-		return "", fmt.Errorf("empty authorization token")
+		return "", fmt.Errorf("missing authorization header or token")
 	}
 
 	lower := strings.ToLower(token)
@@ -121,6 +123,10 @@ func (h *Handler) GetOrgChart(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetDepartments(w http.ResponseWriter, r *http.Request) {
+	if _, err := h.authenticate(r); err != nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized: "+err.Error())
+		return
+	}
 	depts, err := h.svc.Repo.GetDepartments(r.Context())
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
@@ -130,6 +136,10 @@ func (h *Handler) GetDepartments(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetTeams(w http.ResponseWriter, r *http.Request) {
+	if _, err := h.authenticate(r); err != nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized: "+err.Error())
+		return
+	}
 	teams, err := h.svc.Repo.GetTeams(r.Context())
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
@@ -139,6 +149,10 @@ func (h *Handler) GetTeams(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetPositions(w http.ResponseWriter, r *http.Request) {
+	if _, err := h.authenticate(r); err != nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized: "+err.Error())
+		return
+	}
 	positions, err := h.svc.Repo.GetPositions(r.Context())
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
@@ -165,6 +179,10 @@ func (h *Handler) ListEmployees(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetEmployeeDetail(w http.ResponseWriter, r *http.Request) {
+	if _, err := h.authenticate(r); err != nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized: "+err.Error())
+		return
+	}
 	id := chi.URLParam(r, "employeeId")
 	emp, err := h.svc.GetEmployeeDetail(r.Context(), id)
 	if err != nil {
@@ -192,6 +210,10 @@ func (h *Handler) CreateEmployee(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetEmployeeCapabilities(w http.ResponseWriter, r *http.Request) {
+	if _, err := h.authenticate(r); err != nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized: "+err.Error())
+		return
+	}
 	id := chi.URLParam(r, "employeeId")
 	caps, err := h.svc.GetEmployeeCapabilities(r.Context(), id)
 	if err != nil {
@@ -204,6 +226,10 @@ func (h *Handler) GetEmployeeCapabilities(w http.ResponseWriter, r *http.Request
 // ----------------- Projects -----------------
 
 func (h *Handler) ListProjects(w http.ResponseWriter, r *http.Request) {
+	if _, err := h.authenticate(r); err != nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized: "+err.Error())
+		return
+	}
 	projects, err := h.svc.GetProjects(r.Context())
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
@@ -213,6 +239,10 @@ func (h *Handler) ListProjects(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetProjectDetail(w http.ResponseWriter, r *http.Request) {
+	if _, err := h.authenticate(r); err != nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized: "+err.Error())
+		return
+	}
 	id := chi.URLParam(r, "projectId")
 	p, err := h.svc.GetProjectDetail(r.Context(), id)
 	if err != nil {
@@ -223,6 +253,10 @@ func (h *Handler) GetProjectDetail(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
+	if _, err := h.authenticate(r); err != nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized: "+err.Error())
+		return
+	}
 	var p domain.Project
 	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
 		h.writeError(w, http.StatusBadRequest, "invalid request body")
@@ -362,8 +396,13 @@ func (h *Handler) AssignTask(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) AcceptTask(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "taskId")
+	// BR-AUTH / QA-RV-03 & QA-CP-18: Authenticate before accepting
+	if _, err := h.authenticate(r); err != nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized: "+err.Error())
+		return
+	}
 
+	id := chi.URLParam(r, "taskId")
 	task, err := h.svc.Repo.GetTaskByID(r.Context(), id)
 	if err != nil {
 		h.writeError(w, http.StatusNotFound, err.Error())
@@ -373,12 +412,6 @@ func (h *Handler) AcceptTask(w http.ResponseWriter, r *http.Request) {
 	// BR-WORK-003 / QA-API-04 & QA-CP-16: Task can only be accepted from in_review or completed
 	if task.Status != domain.TaskStateInReview && task.Status != domain.TaskStateCompleted {
 		h.writeError(w, http.StatusBadRequest, fmt.Sprintf("BR-WORK-003 violation: task cannot be accepted from state %s; must be in_review or completed", task.Status))
-		return
-	}
-
-	// QA-RV-03 & QA-CP-18: Authenticate before accepting
-	if _, err := h.authenticate(r); err != nil {
-		h.writeError(w, http.StatusUnauthorized, "unauthorized: "+err.Error())
 		return
 	}
 
@@ -491,6 +524,11 @@ func (h *Handler) GetBoardSummary(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) StreamBoardUpdates(w http.ResponseWriter, r *http.Request) {
+	if _, err := h.authenticate(r); err != nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized: "+err.Error())
+		return
+	}
+
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
@@ -527,6 +565,10 @@ func (h *Handler) StreamBoardUpdates(w http.ResponseWriter, r *http.Request) {
 // ----------------- Capabilities & Models -----------------
 
 func (h *Handler) GetMCPServers(w http.ResponseWriter, r *http.Request) {
+	if _, err := h.authenticate(r); err != nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized: "+err.Error())
+		return
+	}
 	servers, err := h.svc.GetMCPServers(r.Context())
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
@@ -536,6 +578,10 @@ func (h *Handler) GetMCPServers(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetModels(w http.ResponseWriter, r *http.Request) {
+	if _, err := h.authenticate(r); err != nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized: "+err.Error())
+		return
+	}
 	models, err := h.svc.GetModels(r.Context())
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())

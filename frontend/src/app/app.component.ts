@@ -74,6 +74,36 @@ export class AppComponent implements OnInit, OnDestroy {
 
   selectedProject: Project | null = null;
 
+  // Authentication configuration
+  authToken = this.api.getAuthToken();
+  showAuthModal = false;
+  inputToken = '';
+
+  openAuthModal(): void {
+    this.inputToken = this.authToken;
+    this.showAuthModal = true;
+  }
+
+  saveToken(): void {
+    const trimmed = this.inputToken.trim();
+    if (trimmed) {
+      this.api.setAuthToken(trimmed);
+      this.authToken = trimmed;
+      this.showAuthModal = false;
+      this.loadAllData();
+      this.notify('Đã cập nhật Bearer token thành công.');
+    }
+  }
+
+  clearToken(): void {
+    this.api.clearAuthToken();
+    this.authToken = '';
+    this.inputToken = '';
+    this.showAuthModal = false;
+    this.loadAllData();
+    this.notify('Đã xoá Bearer token.');
+  }
+
   // New Task Form Modal
   showCreateTaskModal = false;
   newTask: Partial<Task> = {
@@ -325,5 +355,6 @@ export class AppComponent implements OnInit, OnDestroy {
     this.selectedTask = null;
     this.selectedProject = null;
     this.showCreateTaskModal = false;
+    this.showAuthModal = false;
   }
 }

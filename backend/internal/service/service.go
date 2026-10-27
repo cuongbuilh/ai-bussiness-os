@@ -350,23 +350,7 @@ func (s *Services) ExecuteTaskRun(ctx context.Context, taskID string) (*domain.E
 		return nil, fmt.Errorf("failed to initialize execution: %w", err)
 	}
 
-	// BR-BUD-001 & BR-BUD-003 / QA-RV-05: Durable atomic budget reservation
-	s.budgetMu.Lock()
-	currentSpent := emp.SpentUSD
-	if s.committedSpend[emp.ID] > currentSpent {
-		currentSpent = s.committedSpend[emp.ID]
-	}
-	dbReserved, _ := s.Repo.GetActiveBudgetReservations(ctx, emp.ID)
-	reserved := s.activeReservations[emp.ID]
-	if dbReserved > reserved {
-		reserved = dbReserved
-	}
-	if emp.BudgetUSD > 0 && (currentSpent+reserved+estimatedRunCost) > emp.BudgetUSD {
-		s.budgetMu.Unlock()
-		return nil, fmt.Errorf("BR-BUD-003 violation: planned run charge ($%.2f) exceeds remaining budget cap ($%.2f remaining of $%.2f cap)",
-			estimatedRunCost, emp.BudgetUSD-(currentSpent+reserved), emp.BudgetUSD)
-	}
-
+	// BR-BUD-001 & BR-BUD-003 / QA-RV-05: Durable atomic budget reservation across multiple instances
 	resID := fmt.Sprintf("res-%s", uuid.New().String()[:8])
 	res := &domain.BudgetReservation{
 		ID:             resID,
@@ -377,7 +361,12 @@ func (s *Services) ExecuteTaskRun(ctx context.Context, taskID string) (*domain.E
 		Status:         "ACTIVE",
 		ExpiresAt:      now.Add(10 * time.Minute),
 	}
-	_ = s.Repo.CreateBudgetReservation(ctx, res)
+
+	if err := s.Repo.AtomicReserveBudget(ctx, res, emp.ID, estimatedRunCost); err != nil {
+		return nil, err
+	}
+
+	s.budgetMu.Lock()
 	s.activeReservations[emp.ID] += estimatedRunCost
 	s.budgetMu.Unlock()
 
@@ -491,8 +480,11 @@ func (s *Services) ExecuteTaskRun(ctx context.Context, taskID string) (*domain.E
 	exec.TotalTokens = totalTokens
 
 	// Settle ledger & update employee spend and task cost
+	if err := s.Repo.UpdateBudgetReservationStatus(ctx, resID, "COMMITTED"); err != nil {
+		return nil, fmt.Errorf("failed to commit budget reservation: %w", err)
+	}
+
 	s.budgetMu.Lock()
-	_ = s.Repo.UpdateBudgetReservationStatus(ctx, resID, "COMMITTED")
 	s.committedSpend[emp.ID] += totalCost
 	s.activeReservations[emp.ID] -= estimatedRunCost
 	if s.activeReservations[emp.ID] < 0 {
@@ -533,7 +525,9 @@ func (s *Services) ExecuteTaskRun(ctx context.Context, taskID string) (*domain.E
 			OutputTokens:    0,
 			CostUSD:         st.CostUSD,
 		}
-		_ = s.Repo.RecordUsageLedger(ctx, entry)
+		if err := s.Repo.RecordUsageLedger(ctx, entry); err != nil {
+			return nil, fmt.Errorf("failed to record usage ledger: %w", err)
+		}
 	}
 
 	s.Broker.Publish("execution", "completed", exec)

@@ -13,9 +13,40 @@ export class ApiService {
   private http = inject(HttpClient);
   // Default to relative /api/v1 (proxied by Nginx in Docker or Angular CLI dev proxy)
   private baseUrl = '/api/v1';
-  private headers = new HttpHeaders({
-    'Authorization': 'Bearer founder-h1-token'
-  });
+  private tokenKey = 'abos_token';
+
+  getAuthToken(): string {
+    if (typeof localStorage === 'undefined') return '';
+    return localStorage.getItem(this.tokenKey) || '';
+  }
+
+  setAuthToken(token: string): void {
+    if (typeof localStorage !== 'undefined') {
+      if (token) {
+        localStorage.setItem(this.tokenKey, token.trim());
+      } else {
+        localStorage.removeItem(this.tokenKey);
+      }
+    }
+    this.restartSSE();
+  }
+
+  clearAuthToken(): void {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(this.tokenKey);
+    }
+    this.restartSSE();
+  }
+
+  private get headers(): HttpHeaders {
+    const token = this.getAuthToken();
+    if (token) {
+      return new HttpHeaders({
+        'Authorization': `Bearer ${token}`
+      });
+    }
+    return new HttpHeaders();
+  }
 
   private sseEvent$ = new Subject<{ type: string; action: string; payload: any }>();
   private eventSource: EventSource | null = null;
@@ -28,11 +59,26 @@ export class ApiService {
     return this.sseEvent$.asObservable();
   }
 
+  restartSSE(): void {
+    if (this.eventSource) {
+      this.eventSource.close();
+      this.eventSource = null;
+    }
+    this.initSSE();
+  }
+
   private initSSE(): void {
     if (typeof EventSource === 'undefined') return;
 
+    if (this.eventSource) {
+      this.eventSource.close();
+      this.eventSource = null;
+    }
+
     try {
-      this.eventSource = new EventSource(`${this.baseUrl}/boards/stream`);
+      const token = this.getAuthToken();
+      const url = token ? `${this.baseUrl}/boards/stream?token=${encodeURIComponent(token)}` : `${this.baseUrl}/boards/stream`;
+      this.eventSource = new EventSource(url);
       
       this.eventSource.onopen = () => {
         // F-08: On initial connect or reconnect, emit refetch event to refresh snapshot

@@ -804,6 +804,56 @@ func (r *PostgresRepo) inScope(ctx context.Context, t *domain.Task, scope string
 	return false
 }
 
+func (r *PostgresRepo) AtomicReserveBudget(ctx context.Context, res *domain.BudgetReservation, employeeID string, estimatedCost float64) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin budget reservation transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Row-level lock on employee to serialize budget reservation across multiple instances
+	var budgetUSD, spentUSD float64
+	err = tx.QueryRowContext(ctx, "SELECT budget_usd, spent_usd FROM employees WHERE id = $1 FOR UPDATE", employeeID).Scan(&budgetUSD, &spentUSD)
+	if err != nil {
+		return fmt.Errorf("failed to lock employee for budget check: %w", err)
+	}
+
+	// Calculate currently active reservations for this employee
+	var activeReserved float64
+	err = tx.QueryRowContext(ctx, `
+		SELECT COALESCE(SUM(br.reserved_usd), 0)
+		FROM budget_reservations br
+		JOIN executions e ON br.execution_id = e.id
+		WHERE e.executing_employee_id = $1
+		  AND br.status = 'ACTIVE'
+		  AND br.expires_at > now()
+	`, employeeID).Scan(&activeReserved)
+	if err != nil {
+		return fmt.Errorf("failed to query active reservations: %w", err)
+	}
+
+	if budgetUSD > 0 && (spentUSD+activeReserved+estimatedCost) > budgetUSD {
+		return fmt.Errorf("BR-BUD-003 violation: planned run charge ($%.2f) exceeds remaining budget cap ($%.2f remaining of $%.2f cap)",
+			estimatedCost, budgetUSD-(spentUSD+activeReserved), budgetUSD)
+	}
+
+	// Insert reservation within same transaction
+	query := `
+		INSERT INTO budget_reservations (
+			id, organization_id, execution_id, step_key, reserved_usd, reserved_tokens, status, expires_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+	`
+	_, err = tx.ExecContext(ctx, query,
+		res.ID, res.OrganizationID, res.ExecutionID, res.StepKey,
+		res.ReservedUSD, res.ReservedTokens, res.Status, res.ExpiresAt,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to insert budget reservation: %w", err)
+	}
+
+	return tx.Commit()
+}
+
 func (r *PostgresRepo) CreateBudgetReservation(ctx context.Context, res *domain.BudgetReservation) error {
 	query := `
 		INSERT INTO budget_reservations (

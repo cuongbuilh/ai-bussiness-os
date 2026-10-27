@@ -191,3 +191,54 @@ func TestQA_RV_10_PersistentBudgetReservationAndUsageLedger(t *testing.T) {
 		t.Fatalf("expected positive execution cost, got %f", exec.TotalCostUSD)
 	}
 }
+
+func TestQA_RV_11_RejectAnonymousReadsAndProjectCreate(t *testing.T) {
+	r := qaRouter()
+
+	// 1. Anonymous POST /projects with {} must return 401 Unauthorized (not 400 Bad Request)
+	code, _ := qaCallWithAuthorization(t, r, "POST", "/projects", map[string]any{}, "")
+	if code != http.StatusUnauthorized && code != http.StatusForbidden {
+		t.Fatalf("anonymous POST /projects returned %d, expected 401", code)
+	}
+
+	// 2. Anonymous GET on read endpoints
+	anonymousReadEndpoints := []string{
+		"/employees/e1",
+		"/employees/e1/capabilities",
+		"/projects",
+		"/projects/p1",
+		"/departments",
+		"/teams",
+		"/positions",
+		"/capabilities/mcp-servers",
+		"/capabilities/models",
+		"/boards/stream",
+	}
+
+	for _, endpoint := range anonymousReadEndpoints {
+		c, _ := qaCallWithAuthorization(t, r, "GET", endpoint, nil, "")
+		if c != http.StatusUnauthorized && c != http.StatusForbidden {
+			t.Fatalf("anonymous GET %s returned %d, expected 401", endpoint, c)
+		}
+	}
+}
+
+func TestQA_RV_12_SSEStreamAuthViaQueryParam(t *testing.T) {
+	r := qaRouter()
+
+	// SSE with query param token should be authorized
+	req := httptest.NewRequest("GET", "/boards/stream?token=founder-h1-token", nil)
+	ctx, cancel := context.WithCancel(req.Context())
+	req = req.WithContext(ctx)
+	w := httptest.NewRecorder()
+
+	go func() {
+		// Cancel request after stream starts to exit loop
+		cancel()
+	}()
+
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("SSE with query param token returned %d, expected 200", w.Code)
+	}
+}

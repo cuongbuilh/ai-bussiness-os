@@ -645,6 +645,34 @@ func (r *MemoryRepo) GetBoardSummary(ctx context.Context, scope string) (*domain
 	return summary, nil
 }
 
+func (r *MemoryRepo) AtomicReserveBudget(ctx context.Context, res *domain.BudgetReservation, employeeID string, estimatedCost float64) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	emp, ok := r.employees[employeeID]
+	if !ok {
+		return fmt.Errorf("employee not found: %s", employeeID)
+	}
+
+	now := time.Now()
+	var activeReserved float64
+	for _, rRes := range r.reservations {
+		if rRes.Status == "ACTIVE" && rRes.ExpiresAt.After(now) {
+			if exec, ok := r.executions[rRes.ExecutionID]; ok && exec.ExecutingEmployeeID == employeeID {
+				activeReserved += rRes.ReservedUSD
+			}
+		}
+	}
+
+	if emp.BudgetUSD > 0 && (emp.SpentUSD+activeReserved+estimatedCost) > emp.BudgetUSD {
+		return fmt.Errorf("BR-BUD-003 violation: planned run charge ($%.2f) exceeds remaining budget cap ($%.2f remaining of $%.2f cap)",
+			estimatedCost, emp.BudgetUSD-(emp.SpentUSD+activeReserved), emp.BudgetUSD)
+	}
+
+	r.reservations[res.ID] = *res
+	return nil
+}
+
 func (r *MemoryRepo) CreateBudgetReservation(ctx context.Context, res *domain.BudgetReservation) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
