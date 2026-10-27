@@ -252,8 +252,18 @@ export class AppComponent implements OnInit, OnDestroy {
         }
       } else if (event.type === 'approval') {
         this.api.getApprovals().subscribe(a => this.approvals = a);
-      } else if (event.type === 'employee') {
+      } else if (event.type === 'employee' || event.type === 'hierarchy') {
         this.api.getEmployees().subscribe(e => this.employees = e);
+        this.api.getOrgChart().subscribe(tree => this.orgTree = tree);
+      } else if (event.type === 'model') {
+        this.api.getModels().subscribe(m => this.models = m);
+      } else if (event.type === 'mcp_server') {
+        this.api.getMCPServers().subscribe(s => this.mcpServers = s);
+      } else if (event.type === 'project') {
+        this.api.getProjects().subscribe(p => this.projects = p);
+      } else if (event.type === 'department' || event.type === 'team') {
+        this.api.getDepartments().subscribe(d => this.departments = d);
+        this.api.getTeams().subscribe(t => this.teams = t);
       }
     });
   }
@@ -303,6 +313,30 @@ export class AppComponent implements OnInit, OnDestroy {
   // ---------------- Tasks & Kanban ----------------
   getTasksByColumn(status: string): Task[] {
     return this.tasks.filter(t => t.status === status);
+  }
+
+  draggedTask: Task | null = null;
+  onTaskDragStart(event: DragEvent, task: Task): void {
+    this.draggedTask = task;
+    if (event.dataTransfer) {
+      event.dataTransfer.setData('text/plain', task.id);
+      event.dataTransfer.effectAllowed = 'move';
+    }
+  }
+
+  onTaskDragOver(event: DragEvent): void {
+    event.preventDefault();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'move';
+    }
+  }
+
+  onTaskDrop(event: DragEvent, newStatus: string): void {
+    event.preventDefault();
+    if (this.draggedTask && this.draggedTask.status !== newStatus) {
+      this.updateTaskStatus(this.draggedTask, newStatus);
+    }
+    this.draggedTask = null;
   }
 
   updateTaskStatus(task: Task, newStatus: string): void {
@@ -477,11 +511,542 @@ export class AppComponent implements OnInit, OnDestroy {
     return this.employees.filter(e => e.kind === 'AI').length;
   }
 
+  // ---------------- CRUD Capabilities: Models ----------------
+  showModelModal = false;
+  isEditingModel = false;
+  modelForm: Partial<ModelInfo> & { featuresText?: string } = {
+    provider: 'Anthropic',
+    modelId: '',
+    revision: '2024-10',
+    status: 'ACTIVE',
+    featuresText: 'Tool Calling, JSON Schema, Streaming'
+  };
+
+  openCreateModelModal(): void {
+    this.isEditingModel = false;
+    this.modelForm = {
+      provider: 'Anthropic',
+      modelId: '',
+      revision: '2024-10',
+      status: 'ACTIVE',
+      featuresText: 'Tool Calling, JSON Schema, Streaming'
+    };
+    this.showModelModal = true;
+  }
+
+  openEditModelModal(m: ModelInfo, event?: Event): void {
+    if (event) event.stopPropagation();
+    this.isEditingModel = true;
+    this.modelForm = {
+      ...m,
+      featuresText: (m.features || []).join(', ')
+    };
+    this.showModelModal = true;
+  }
+
+  saveModel(): void {
+    if (!this.modelForm.provider || !this.modelForm.modelId) {
+      alert('Vui lòng nhập Nhà cung cấp (Provider) và Mã Model ID');
+      return;
+    }
+    const features = (this.modelForm.featuresText || '')
+      .split(',')
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+
+    const payload: Partial<ModelInfo> = {
+      ...this.modelForm,
+      features
+    };
+
+    if (this.isEditingModel && this.modelForm.id) {
+      this.api.updateModel(this.modelForm.id, payload).subscribe({
+        next: () => {
+          this.notify(`Đã cập nhật mô hình ${this.modelForm.modelId}`);
+          this.showModelModal = false;
+          this.api.getModels().subscribe(m => this.models = m);
+        },
+        error: (err) => alert(`Lỗi: ${err?.error?.error || err.message}`)
+      });
+    } else {
+      this.api.createModel(payload).subscribe({
+        next: () => {
+          this.notify(`Đã thêm mô hình mới ${this.modelForm.modelId}`);
+          this.showModelModal = false;
+          this.api.getModels().subscribe(m => this.models = m);
+        },
+        error: (err) => alert(`Lỗi: ${err?.error?.error || err.message}`)
+      });
+    }
+  }
+
+  deleteModel(id: string, event?: Event): void {
+    if (event) event.stopPropagation();
+    if (!confirm('Bạn có chắc chắn muốn gỡ bỏ mô hình này không?')) return;
+    this.api.deleteModel(id).subscribe({
+      next: () => {
+        this.notify('Đã xóa mô hình thành công');
+        this.api.getModels().subscribe(m => this.models = m);
+      },
+      error: (err) => alert(`Lỗi: ${err?.error?.error || err.message}`)
+    });
+  }
+
+  // ---------------- CRUD Capabilities: MCP Servers ----------------
+  showMCPModal = false;
+  isEditingMCP = false;
+  mcpForm: Partial<MCPServer> = {
+    name: '',
+    transport: 'stdio',
+    description: '',
+    risk: 'R1',
+    enabled: true,
+    reviewStatus: 'APPROVED'
+  };
+
+  openCreateMCPModal(): void {
+    this.isEditingMCP = false;
+    this.mcpForm = {
+      name: '',
+      transport: 'stdio',
+      description: '',
+      risk: 'R1',
+      enabled: true,
+      reviewStatus: 'APPROVED'
+    };
+    this.showMCPModal = true;
+  }
+
+  openEditMCPModal(s: MCPServer, event?: Event): void {
+    if (event) event.stopPropagation();
+    this.isEditingMCP = true;
+    this.mcpForm = { ...s };
+    this.showMCPModal = true;
+  }
+
+  saveMCP(): void {
+    if (!this.mcpForm.name) {
+      alert('Vui lòng nhập tên MCP Server');
+      return;
+    }
+    if (this.isEditingMCP && this.mcpForm.id) {
+      this.api.updateMCPServer(this.mcpForm.id, this.mcpForm).subscribe({
+        next: () => {
+          this.notify(`Đã cập nhật MCP Server ${this.mcpForm.name}`);
+          this.showMCPModal = false;
+          this.api.getMCPServers().subscribe(s => this.mcpServers = s);
+        },
+        error: (err) => alert(`Lỗi: ${err?.error?.error || err.message}`)
+      });
+    } else {
+      this.api.createMCPServer(this.mcpForm).subscribe({
+        next: () => {
+          this.notify(`Đã đăng ký MCP Server ${this.mcpForm.name}`);
+          this.showMCPModal = false;
+          this.api.getMCPServers().subscribe(s => this.mcpServers = s);
+        },
+        error: (err) => alert(`Lỗi: ${err?.error?.error || err.message}`)
+      });
+    }
+  }
+
+  deleteMCP(id: string, event?: Event): void {
+    if (event) event.stopPropagation();
+    if (!confirm('Bạn có chắc chắn muốn gỡ bỏ MCP Server này?')) return;
+    this.api.deleteMCPServer(id).subscribe({
+      next: () => {
+        this.notify('Đã xóa MCP Server thành công');
+        this.api.getMCPServers().subscribe(s => this.mcpServers = s);
+      },
+      error: (err) => alert(`Lỗi: ${err?.error?.error || err.message}`)
+    });
+  }
+
+  // ---------------- CRUD Projects ----------------
+  showProjectModal = false;
+  isEditingProject = false;
+  projectForm: Partial<Project> & { teamsText?: string } = {
+    code: '',
+    name: '',
+    description: '',
+    owner: '',
+    status: 'ACTIVE',
+    budget: 50,
+    due: '',
+    teamsText: 'platform, quality'
+  };
+
+  openCreateProjectModal(): void {
+    this.isEditingProject = false;
+    this.projectForm = {
+      code: '',
+      name: '',
+      description: '',
+      owner: this.employees.find(e => e.role === 'AI Manager' || e.role === 'Tech Lead')?.id || 'm2',
+      status: 'ACTIVE',
+      budget: 60,
+      due: new Date(Date.now() + 60 * 86400000).toISOString().split('T')[0],
+      teamsText: 'platform, quality'
+    };
+    this.showProjectModal = true;
+  }
+
+  openEditProjectModal(p: Project, event?: Event): void {
+    if (event) event.stopPropagation();
+    this.isEditingProject = true;
+    this.projectForm = {
+      ...p,
+      teamsText: (p.teams || []).join(', ')
+    };
+    this.showProjectModal = true;
+  }
+
+  saveProject(): void {
+    if (!this.projectForm.code || !this.projectForm.name || !this.projectForm.owner) {
+      alert('Vui lòng nhập Mã dự án, Tên dự án và Chọn người chịu trách nhiệm (Owner)');
+      return;
+    }
+    const teams = (this.projectForm.teamsText || '')
+      .split(',')
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+
+    const payload: Partial<Project> = {
+      ...this.projectForm,
+      teams
+    };
+
+    if (this.isEditingProject && this.projectForm.id) {
+      this.api.updateProject(this.projectForm.id, payload).subscribe({
+        next: () => {
+          this.notify(`Đã cập nhật dự án ${this.projectForm.code}`);
+          this.showProjectModal = false;
+          this.api.getProjects().subscribe(p => this.projects = p);
+          if (this.selectedProject && this.selectedProject.id === this.projectForm.id) {
+            this.openProjectDetail(this.projectForm.id);
+          }
+        },
+        error: (err) => alert(`Lỗi: ${err?.error?.error || err.message}`)
+      });
+    } else {
+      this.api.createProject(payload).subscribe({
+        next: () => {
+          this.notify(`Đã tạo dự án mới ${this.projectForm.code}`);
+          this.showProjectModal = false;
+          this.api.getProjects().subscribe(p => this.projects = p);
+        },
+        error: (err) => alert(`Lỗi: ${err?.error?.error || err.message}`)
+      });
+    }
+  }
+
+  deleteProject(id: string, event?: Event): void {
+    if (event) event.stopPropagation();
+    if (!confirm('Bạn có chắc chắn muốn xóa/lưu trữ dự án này?')) return;
+    this.api.deleteProject(id).subscribe({
+      next: () => {
+        this.notify('Đã xóa / lưu trữ dự án thành công');
+        this.selectedProject = null;
+        this.api.getProjects().subscribe(p => this.projects = p);
+      },
+      error: (err) => alert(`Lỗi: ${err?.error?.error || err.message}`)
+    });
+  }
+
+  // ---------------- Org Hierarchy Reporting Line Reassignment ----------------
+  showReassignModal = false;
+  reassignEmployeeId = '';
+  reassignManagerId: string | null = null;
+  reassignError = '';
+
+  openReassignModal(employeeId?: string, event?: Event): void {
+    if (event) event.stopPropagation();
+    this.reassignError = '';
+    this.reassignEmployeeId = employeeId || (this.employees.find(e => e.id !== 'h1')?.id || '');
+    const currentEmp = this.employees.find(e => e.id === this.reassignEmployeeId);
+    this.reassignManagerId = currentEmp?.managerId || null;
+    this.showReassignModal = true;
+  }
+
+  onReassignEmpChange(): void {
+    this.reassignError = '';
+    const currentEmp = this.employees.find(e => e.id === this.reassignEmployeeId);
+    this.reassignManagerId = currentEmp?.managerId || null;
+  }
+
+  getValidManagersFor(empId: string): Employee[] {
+    if (!empId) return this.employees;
+    // Find all subordinates recursively
+    const subordinates = new Set<string>();
+    subordinates.add(empId);
+    let added = true;
+    while (added) {
+      added = false;
+      for (const e of this.employees) {
+        if (e.managerId && subordinates.has(e.managerId) && !subordinates.has(e.id)) {
+          subordinates.add(e.id);
+          added = true;
+        }
+      }
+    }
+    // Valid managers are employees not in subordinates set
+    return this.employees.filter(e => !subordinates.has(e.id));
+  }
+
+  submitReassign(): void {
+    this.reassignError = '';
+    if (!this.reassignEmployeeId) {
+      this.reassignError = 'Vui lòng chọn nhân sự cần điều chuyển';
+      return;
+    }
+    this.api.updateReportingLine(this.reassignEmployeeId, this.reassignManagerId).subscribe({
+      next: () => {
+        this.notify('Đã cập nhật tuyến báo cáo phân cấp thành công!');
+        this.showReassignModal = false;
+        this.api.getOrgChart().subscribe(tree => this.orgTree = tree);
+        this.api.getEmployees().subscribe(e => this.employees = e);
+      },
+      error: (err) => {
+        this.reassignError = err?.error?.error || err.message;
+      }
+    });
+  }
+
+  // ---------------- Departments & Teams Management ----------------
+  showDeptTeamModal = false;
+  activeDeptTeamTab: 'depts' | 'teams' = 'depts';
+  isEditingDept = false;
+  isEditingTeam = false;
+  deptForm: Partial<Department> = { name: '' };
+  teamForm: Partial<Team> = { name: '', departmentId: '' };
+
+  openDeptTeamModal(): void {
+    this.activeDeptTeamTab = 'depts';
+    this.isEditingDept = false;
+    this.isEditingTeam = false;
+    this.deptForm = { name: '' };
+    this.teamForm = { name: '', departmentId: this.departments[0]?.id || '' };
+    this.showDeptTeamModal = true;
+  }
+
+  cancelEditDept(): void {
+    this.isEditingDept = false;
+    this.deptForm = { name: '' };
+  }
+
+  cancelEditTeam(): void {
+    this.isEditingTeam = false;
+    this.teamForm = { name: '', departmentId: this.departments[0]?.id || '' };
+  }
+
+  saveDepartment(): void {
+    if (!this.deptForm.name) {
+      alert('Vui lòng nhập tên phòng ban');
+      return;
+    }
+    if (this.isEditingDept && this.deptForm.id) {
+      this.api.updateDepartment(this.deptForm.id, this.deptForm).subscribe({
+        next: () => {
+          this.notify('Đã cập nhật phòng ban');
+          this.isEditingDept = false;
+          this.deptForm = { name: '' };
+          this.api.getDepartments().subscribe(d => this.departments = d);
+        },
+        error: (err) => alert(`Lỗi: ${err?.error?.error || err.message}`)
+      });
+    } else {
+      this.api.createDepartment(this.deptForm).subscribe({
+        next: () => {
+          this.notify('Đã tạo phòng ban mới');
+          this.deptForm = { name: '' };
+          this.api.getDepartments().subscribe(d => this.departments = d);
+        },
+        error: (err) => alert(`Lỗi: ${err?.error?.error || err.message}`)
+      });
+    }
+  }
+
+  deleteDepartment(id: string): void {
+    if (!confirm('Bạn có chắc chắn muốn xóa phòng ban này?')) return;
+    this.api.deleteDepartment(id).subscribe({
+      next: () => {
+        this.notify('Đã xóa phòng ban thành công');
+        this.api.getDepartments().subscribe(d => this.departments = d);
+      },
+      error: (err) => alert(`Lỗi: ${err?.error?.error || err.message}`)
+    });
+  }
+
+  saveTeam(): void {
+    if (!this.teamForm.name || !this.teamForm.departmentId) {
+      alert('Vui lòng nhập tên team và chọn phòng ban trực thuộc');
+      return;
+    }
+    if (this.isEditingTeam && this.teamForm.id) {
+      this.api.updateTeam(this.teamForm.id, this.teamForm).subscribe({
+        next: () => {
+          this.notify('Đã cập nhật team');
+          this.isEditingTeam = false;
+          this.teamForm = { name: '', departmentId: this.departments[0]?.id || '' };
+          this.api.getTeams().subscribe(t => this.teams = t);
+        },
+        error: (err) => alert(`Lỗi: ${err?.error?.error || err.message}`)
+      });
+    } else {
+      this.api.createTeam(this.teamForm).subscribe({
+        next: () => {
+          this.notify('Đã tạo team mới');
+          this.teamForm = { name: '', departmentId: this.departments[0]?.id || '' };
+          this.api.getTeams().subscribe(t => this.teams = t);
+        },
+        error: (err) => alert(`Lỗi: ${err?.error?.error || err.message}`)
+      });
+    }
+  }
+
+  deleteTeam(id: string): void {
+    if (!confirm('Bạn có chắc chắn muốn xóa team này?')) return;
+    this.api.deleteTeam(id).subscribe({
+      next: () => {
+        this.notify('Đã xóa team thành công');
+        this.api.getTeams().subscribe(t => this.teams = t);
+      },
+      error: (err) => alert(`Lỗi: ${err?.error?.error || err.message}`)
+    });
+  }
+
+  // ---------------- Workforce (Employees) Management ----------------
+  showEmployeeModal = false;
+  isEditingEmployee = false;
+  employeeModalTab: 'basic' | 'model_budget' | 'mcp_skills' = 'basic';
+  employeeForm: Partial<Employee> & { skillsText?: string } = {
+    displayName: '',
+    kind: 'AI',
+    title: '',
+    role: '',
+    departmentId: '',
+    managerId: '',
+    model: 'Model X',
+    provider: 'Provider A',
+    budget: 30,
+    skillsText: 'Automation, Code Review',
+    mcp: ['task-mcp'],
+    teams: ['platform']
+  };
+
+  openCreateEmployeeModal(): void {
+    this.isEditingEmployee = false;
+    this.employeeModalTab = 'basic';
+    this.employeeForm = {
+      displayName: '',
+      kind: 'AI',
+      title: 'AI Specialist',
+      role: 'Engineer',
+      departmentId: this.departments[0]?.id || 'tech',
+      managerId: 'm2',
+      model: 'Model X',
+      provider: 'Provider A',
+      budget: 30,
+      skillsText: 'Automation, Analysis',
+      mcp: ['task-mcp', 'git-mcp'],
+      teams: ['platform']
+    };
+    this.showEmployeeModal = true;
+  }
+
+  openEditEmployeeModal(e: Employee, event?: Event): void {
+    if (event) event.stopPropagation();
+    this.isEditingEmployee = true;
+    this.employeeModalTab = 'basic';
+    this.employeeForm = {
+      ...e,
+      skillsText: (e.skills || []).join(', ')
+    };
+    this.showEmployeeModal = true;
+  }
+
+  saveEmployee(): void {
+    if (!this.employeeForm.displayName || !this.employeeForm.title) {
+      alert('Vui lòng nhập Họ tên và Chức danh');
+      return;
+    }
+    const skills = (this.employeeForm.skillsText || '')
+      .split(',')
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+
+    const payload: Partial<Employee> = {
+      ...this.employeeForm,
+      name: this.employeeForm.displayName,
+      skills
+    };
+
+    if (this.isEditingEmployee && this.employeeForm.id) {
+      this.api.updateEmployee(this.employeeForm.id, payload).subscribe({
+        next: () => {
+          this.notify(`Đã cập nhật nhân sự ${this.employeeForm.displayName}`);
+          this.showEmployeeModal = false;
+          this.api.getEmployees().subscribe(e => this.employees = e);
+          this.api.getOrgChart().subscribe(tree => this.orgTree = tree);
+          if (this.selectedEmployee && this.selectedEmployee.id === this.employeeForm.id) {
+            this.openEmployeeDetail(this.employeeForm.id);
+          }
+        },
+        error: (err) => alert(`Lỗi: ${err?.error?.error || err.message}`)
+      });
+    } else {
+      this.api.createEmployee(payload).subscribe({
+        next: () => {
+          this.notify(`Đã thêm nhân sự mới ${this.employeeForm.displayName}`);
+          this.showEmployeeModal = false;
+          this.api.getEmployees().subscribe(e => this.employees = e);
+          this.api.getOrgChart().subscribe(tree => this.orgTree = tree);
+        },
+        error: (err) => alert(`Lỗi: ${err?.error?.error || err.message}`)
+      });
+    }
+  }
+
+  deactivateEmployee(id: string, event?: Event): void {
+    if (event) event.stopPropagation();
+    if (!confirm('Bạn có chắc chắn muốn vô hiệu hóa nhân sự này?')) return;
+    this.api.deleteEmployee(id).subscribe({
+      next: () => {
+        this.notify('Đã vô hiệu hóa nhân sự thành công');
+        this.api.getEmployees().subscribe(e => this.employees = e);
+        this.api.getOrgChart().subscribe(tree => this.orgTree = tree);
+      },
+      error: (err) => alert(`Lỗi: ${err?.error?.error || err.message}`)
+    });
+  }
+
+  toggleMCPGrant(mcpName: string): void {
+    if (!this.employeeForm.mcp) {
+      this.employeeForm.mcp = [];
+    }
+    const idx = this.employeeForm.mcp.indexOf(mcpName);
+    if (idx > -1) {
+      this.employeeForm.mcp.splice(idx, 1);
+    } else {
+      this.employeeForm.mcp.push(mcpName);
+    }
+  }
+
+  isMCPGranted(mcpName: string): boolean {
+    return !!this.employeeForm.mcp?.includes(mcpName);
+  }
+
   closeOverlays(): void {
     this.selectedEmployee = null;
     this.selectedTask = null;
     this.selectedProject = null;
     this.showCreateTaskModal = false;
     this.showAuthModal = false;
+    this.showModelModal = false;
+    this.showMCPModal = false;
+    this.showProjectModal = false;
+    this.showReassignModal = false;
+    this.showDeptTeamModal = false;
+    this.showEmployeeModal = false;
   }
 }

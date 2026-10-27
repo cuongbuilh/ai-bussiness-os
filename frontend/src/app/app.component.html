@@ -131,6 +131,7 @@
       </div>
       <div class="toolbar">
         <span class="scope-pill">◉ Enterprise Organization</span>
+        <span class="realtime-badge"><span class="pulse-indicator">●</span> Realtime Connected (SSE)</span>
         <button class="btn mini theme-btn" (click)="toggleTheme()" [title]="theme === 'dark' ? 'Chuyển sang giao diện Sáng' : 'Chuyển sang giao diện Tối'">
           <span *ngIf="theme === 'dark'">☀️ Sáng</span>
           <span *ngIf="theme === 'light'">🌙 Tối</span>
@@ -284,6 +285,8 @@
             <div class="section-sub">Quan hệ báo cáo trực tiếp 1-1 (1 direct manager / employee). Click vào bất kỳ nhân sự nào để xem thông tin chi tiết.</div>
           </div>
           <div class="actions">
+            <button class="btn secondary" (click)="openReassignModal()">⚙️ Điều chuyển quản lý</button>
+            <button class="btn secondary" (click)="openDeptTeamModal()">🏢 Phòng/Ban & Teams</button>
             <button class="btn primary" (click)="openCreateTaskModal()">＋ Giao việc</button>
           </div>
         </div>
@@ -443,13 +446,20 @@
 
         <!-- KANBAN VIEW -->
         <div class="kanban" *ngIf="boardMode === 'kanban'">
-          <div *ngFor="let col of kanbanColumns" class="kanban-col">
+          <div *ngFor="let col of kanbanColumns" 
+               class="kanban-col"
+               (dragover)="onTaskDragOver($event)"
+               (drop)="onTaskDrop($event, col.code)">
             <div class="kanban-title">
               {{ col.label }}
               <em>{{ getTasksByColumn(col.code).length }}</em>
             </div>
 
-            <div *ngFor="let task of getTasksByColumn(col.code)" class="taskcard" (click)="openTaskDetail(task.id)">
+            <div *ngFor="let task of getTasksByColumn(col.code)" 
+                 class="taskcard" 
+                 draggable="true"
+                 (dragstart)="onTaskDragStart($event, task)"
+                 (click)="openTaskDetail(task.id)">
               <div class="row">
                 <span class="taskid">{{ task.id }}</span>
                 <span class="pillpriority">{{ task.priority }}</span>
@@ -508,6 +518,7 @@
             <div class="section-sub">Dự án liên phòng ban / team, KPI mục tiêu, ngân sách trần, mốc tiến độ (milestones) và task backlog.</div>
           </div>
           <div class="actions">
+            <button class="btn secondary" (click)="openCreateProjectModal()">＋ Tạo Dự án mới</button>
             <button class="btn primary" (click)="openCreateTaskModal()">＋ Giao task trong dự án</button>
           </div>
         </div>
@@ -535,8 +546,14 @@
             <div class="progress" style="margin-top:16px">
               <span [style.width.%]="(p.spent / (p.budget || 1)) * 100"></span>
             </div>
-            <div class="flex" style="margin-top:12px">
-              <span *ngFor="let tm of p.teams" class="chip">{{ tm }}</span>
+            <div class="flex" style="margin-top:12px; justify-content:space-between; align-items:center">
+              <div class="flex">
+                <span *ngFor="let tm of p.teams" class="chip">{{ tm }}</span>
+              </div>
+              <div class="flex" (click)="$event.stopPropagation()">
+                <button class="btn mini" (click)="openEditProjectModal(p, $event)" title="Sửa dự án">✏️ Sửa</button>
+                <button class="btn mini danger" (click)="deleteProject(p.id, $event)" title="Xóa/Lưu trữ dự án">🗑️</button>
+              </div>
             </div>
           </div>
         </div>
@@ -551,6 +568,7 @@
             <div class="section-sub">Quản lý danh sách nhân sự người thật và AI, vị trí, vai trò, người quản lý trực tiếp, mô hình LLM và hạn mức ngân sách.</div>
           </div>
           <div class="actions">
+            <button class="btn secondary" (click)="openCreateEmployeeModal()">＋ Thêm Nhân sự / Agent</button>
             <button class="btn primary" (click)="openCreateTaskModal()">＋ Giao việc</button>
           </div>
         </div>
@@ -566,6 +584,7 @@
                 <th>Mô hình / Provider</th>
                 <th>KPI Score</th>
                 <th>Chi tiêu (Spent)</th>
+                <th style="width:180px">Thao tác</th>
               </tr>
             </thead>
             <tbody>
@@ -586,6 +605,13 @@
                 </td>
                 <td><span class="chip">{{ e.kpi }}%</span></td>
                 <td>${{ e.spent.toFixed(2) }}</td>
+                <td (click)="$event.stopPropagation()">
+                  <div class="flex">
+                    <button class="btn mini" (click)="openEditEmployeeModal(e, $event)" title="Chỉnh sửa nhân sự">✏️ Sửa</button>
+                    <button class="btn mini" (click)="openReassignModal(e.id, $event)" title="Điều chuyển quản lý">⚙️ Phân cấp</button>
+                    <button class="btn mini danger" *ngIf="e.id !== 'h1'" (click)="deactivateEmployee(e.id, $event)" title="Vô hiệu hóa">🚫</button>
+                  </div>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -600,16 +626,27 @@
             <h1>Models, MCP & Skills</h1>
             <div class="section-sub">Danh mục nhà cung cấp mô hình (Provider), máy chủ giao thức MCP (Model Context Protocol) và chính sách phân quyền.</div>
           </div>
+          <div class="actions">
+            <button class="btn secondary" (click)="openCreateModelModal()">＋ Thêm Model</button>
+            <button class="btn secondary" (click)="openCreateMCPModal()">＋ Đăng ký MCP</button>
+          </div>
         </div>
 
         <div class="grid cols-2">
           <!-- Models -->
           <div class="card">
-            <h2>Provider & Model Registry</h2>
+            <div class="row" style="margin-bottom:12px">
+              <h2>Provider & Model Registry</h2>
+              <button class="btn mini" (click)="openCreateModelModal()">＋ Model mới</button>
+            </div>
             <div *ngFor="let m of models" class="toolrow">
               <div class="row">
                 <b>{{ m.modelId }} ({{ m.provider }})</b>
-                <span class="status active">Active</span>
+                <div class="flex">
+                  <span class="status" [class.active]="m.status === 'ACTIVE'">{{ m.status }}</span>
+                  <button class="btn mini" (click)="openEditModelModal(m, $event)" title="Sửa model">✏️</button>
+                  <button class="btn mini danger" (click)="deleteModel(m.id, $event)" title="Xóa model">🗑️</button>
+                </div>
               </div>
               <div class="small muted" style="margin-top:4px">Revision: {{ m.revision }}</div>
               <div class="flex" style="margin-top:6px">
@@ -620,13 +657,20 @@
 
           <!-- MCP Servers -->
           <div class="card">
-            <h2>MCP Server Catalogue</h2>
+            <div class="row" style="margin-bottom:12px">
+              <h2>MCP Server Catalogue</h2>
+              <button class="btn mini" (click)="openCreateMCPModal()">＋ MCP mới</button>
+            </div>
             <div *ngFor="let mcp of mcpServers" class="toolrow row">
               <div>
                 <b class="font-mono">{{ mcp.name }}</b>
                 <div class="muted tiny">{{ mcp.description }}</div>
               </div>
-              <span class="chip">{{ mcp.risk }}</span>
+              <div class="flex">
+                <span class="chip" [ngClass]="mcp.risk">{{ mcp.risk }}</span>
+                <button class="btn mini" (click)="openEditMCPModal(mcp, $event)" title="Sửa MCP Server">✏️</button>
+                <button class="btn mini danger" (click)="deleteMCP(mcp.id, $event)" title="Xóa MCP Server">🗑️</button>
+              </div>
             </div>
           </div>
         </div>
@@ -1087,6 +1131,454 @@
           <button type="button" class="btn primary" (click)="saveToken()">Lưu token</button>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- MODEL CRUD MODAL -->
+  <div class="modal-layer modal-center" *ngIf="showModelModal" (click)="showModelModal = false">
+    <div class="dialog" (click)="$event.stopPropagation()" style="max-width: 520px;">
+      <div class="card-title">{{ isEditingModel ? 'Chỉnh sửa Model LLM' : 'Đăng ký Model LLM mới' }}</div>
+      <p class="section-sub" style="margin-top: 6px;">
+        Cấu hình thông số model, nhà cung cấp (provider) và các tính năng hỗ trợ.
+      </p>
+
+      <form (ngSubmit)="saveModel()" style="margin-top: 16px;">
+        <div class="grid cols-2">
+          <div class="formgroup">
+            <label>Nhà cung cấp (Provider)</label>
+            <select [(ngModel)]="modelForm.provider" name="provider" class="select" required>
+              <option value="Anthropic">Anthropic</option>
+              <option value="OpenAI">OpenAI</option>
+              <option value="Google Gemini">Google Gemini</option>
+              <option value="Provider A">Provider A</option>
+              <option value="Provider B">Provider B</option>
+              <option value="Ollama">Ollama Local</option>
+            </select>
+          </div>
+          <div class="formgroup">
+            <label>Mã Model ID</label>
+            <input [(ngModel)]="modelForm.modelId" name="modelId" class="input" placeholder="claude-3-5-sonnet..." required />
+          </div>
+        </div>
+
+        <div class="grid cols-2">
+          <div class="formgroup">
+            <label>Revision / Phiên bản</label>
+            <input [(ngModel)]="modelForm.revision" name="revision" class="input" placeholder="2024-10..." />
+          </div>
+          <div class="formgroup">
+            <label>Trạng thái</label>
+            <select [(ngModel)]="modelForm.status" name="status" class="select">
+              <option value="ACTIVE">ACTIVE</option>
+              <option value="DEPRECATED">DEPRECATED</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="formgroup">
+          <label>Tính năng (phân tách bởi dấu phẩy)</label>
+          <input [(ngModel)]="modelForm.featuresText" name="featuresText" class="input" placeholder="Tool Calling, JSON Schema, Vision..." />
+        </div>
+
+        <div class="actions" style="margin-top: 20px; display: flex; justify-content: flex-end; gap: 8px;">
+          <button type="button" class="btn" (click)="showModelModal = false">Hủy</button>
+          <button type="submit" class="btn primary">{{ isEditingModel ? 'Lưu thay đổi' : 'Đăng ký Model' }}</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MCP SERVER CRUD MODAL -->
+  <div class="modal-layer modal-center" *ngIf="showMCPModal" (click)="showMCPModal = false">
+    <div class="dialog" (click)="$event.stopPropagation()" style="max-width: 520px;">
+      <div class="card-title">{{ isEditingMCP ? 'Chỉnh sửa MCP Server' : 'Đăng ký MCP Server mới' }}</div>
+      <p class="section-sub" style="margin-top: 6px;">
+        Khai báo MCP server, giao thức vận chuyển (transport) và phân tầng rủi ro bảo mật.
+      </p>
+
+      <form (ngSubmit)="saveMCP()" style="margin-top: 16px;">
+        <div class="grid cols-2">
+          <div class="formgroup">
+            <label>Tên MCP Server (Technical Name)</label>
+            <input [(ngModel)]="mcpForm.name" name="name" class="input font-mono" placeholder="custom-mcp..." required />
+          </div>
+          <div class="formgroup">
+            <label>Giao thức (Transport)</label>
+            <select [(ngModel)]="mcpForm.transport" name="transport" class="select">
+              <option value="stdio">stdio</option>
+              <option value="sse">sse</option>
+              <option value="http">http</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid cols-2">
+          <div class="formgroup">
+            <label>Tầng rủi ro (Risk Tier)</label>
+            <select [(ngModel)]="mcpForm.risk" name="risk" class="select">
+              <option value="R1">R1 (Thấp / Read-only)</option>
+              <option value="R2">R2 (Trung bình / File system, Git)</option>
+              <option value="R3">R3 (Cao / Shell, Shell exec, Deploy)</option>
+            </select>
+          </div>
+          <div class="formgroup">
+            <label>Kích hoạt</label>
+            <select [(ngModel)]="mcpForm.enabled" name="enabled" class="select">
+              <option [ngValue]="true">Bật (Enabled)</option>
+              <option [ngValue]="false">Tắt (Disabled)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="formgroup">
+          <label>Mô tả chức năng</label>
+          <input [(ngModel)]="mcpForm.description" name="description" class="input" placeholder="Mô tả công cụ và mục đích sử dụng..." />
+        </div>
+
+        <div class="actions" style="margin-top: 20px; display: flex; justify-content: flex-end; gap: 8px;">
+          <button type="button" class="btn" (click)="showMCPModal = false">Hủy</button>
+          <button type="submit" class="btn primary">{{ isEditingMCP ? 'Lưu thay đổi' : 'Đăng ký Server' }}</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- PROJECT CRUD MODAL -->
+  <div class="modal-layer modal-center" *ngIf="showProjectModal" (click)="showProjectModal = false">
+    <div class="dialog" (click)="$event.stopPropagation()" style="max-width: 580px;">
+      <div class="card-title">{{ isEditingProject ? 'Chỉnh sửa Dự án' : 'Tạo Dự án mới' }}</div>
+      <p class="section-sub" style="margin-top: 6px;">
+        Quản trị sáng kiến dự án, hạn mức ngân sách giải ngân và người chịu trách nhiệm.
+      </p>
+
+      <form (ngSubmit)="saveProject()" style="margin-top: 16px;">
+        <div class="grid cols-2">
+          <div class="formgroup">
+            <label>Mã dự án (Code)</label>
+            <input [(ngModel)]="projectForm.code" name="code" class="input font-mono" placeholder="PROJ-01..." [readonly]="isEditingProject" required />
+          </div>
+          <div class="formgroup">
+            <label>Tên dự án</label>
+            <input [(ngModel)]="projectForm.name" name="name" class="input" placeholder="Tên sáng kiến dự án..." required />
+          </div>
+        </div>
+
+        <div class="formgroup">
+          <label>Mô tả mục tiêu</label>
+          <textarea [(ngModel)]="projectForm.description" name="description" class="textarea" rows="2" placeholder="Chi tiết mục tiêu, deliverables..."></textarea>
+        </div>
+
+        <div class="grid cols-3">
+          <div class="formgroup">
+            <label>Chủ dự án (Owner)</label>
+            <select [(ngModel)]="projectForm.owner" name="owner" class="select" required>
+              <option *ngFor="let e of employees" [value]="e.id">{{ e.name }} ({{ e.role }})</option>
+            </select>
+          </div>
+          <div class="formgroup">
+            <label>Ngân sách trần (USD)</label>
+            <input type="number" [(ngModel)]="projectForm.budget" name="budget" class="input" min="0" step="5" />
+          </div>
+          <div class="formgroup">
+            <label>Trạng thái</label>
+            <select [(ngModel)]="projectForm.status" name="status" class="select">
+              <option value="ACTIVE">ACTIVE</option>
+              <option value="PLANNED">PLANNED</option>
+              <option value="COMPLETED">COMPLETED</option>
+              <option value="ARCHIVED">ARCHIVED</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid cols-2">
+          <div class="formgroup">
+            <label>Hạn hoàn thành (Due date)</label>
+            <input type="date" [(ngModel)]="projectForm.due" name="due" class="input" />
+          </div>
+          <div class="formgroup">
+            <label>Teams tham gia (phân tách dấu phẩy)</label>
+            <input [(ngModel)]="projectForm.teamsText" name="teamsText" class="input" placeholder="platform, quality..." />
+          </div>
+        </div>
+
+        <div class="actions" style="margin-top: 20px; display: flex; justify-content: flex-end; gap: 8px;">
+          <button type="button" class="btn" (click)="showProjectModal = false">Hủy</button>
+          <button type="submit" class="btn primary">{{ isEditingProject ? 'Lưu cập nhật' : 'Tạo Dự án' }}</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- REASSIGN REPORTING LINE MODAL (ORG HIERARCHY) -->
+  <div class="modal-layer modal-center" *ngIf="showReassignModal" (click)="showReassignModal = false">
+    <div class="dialog" (click)="$event.stopPropagation()" style="max-width: 520px;">
+      <div class="card-title">⚙️ Điều chuyển Quản lý trực tiếp (Phân cấp)</div>
+      <p class="section-sub" style="margin-top: 6px;">
+        Quy định báo cáo 1 cấp trực tiếp (BR-ORG-001 & BR-ORG-002). Hệ thống tự động kiểm tra và chặn vòng lặp phụ thuộc (Cycle Prevention).
+      </p>
+
+      <form (ngSubmit)="submitReassign()" style="margin-top: 16px;">
+        <div class="formgroup">
+          <label>Nhân sự cần điều chuyển tuyến báo cáo</label>
+          <select [(ngModel)]="reassignEmployeeId" (change)="onReassignEmpChange()" name="reassignEmployeeId" class="select" required>
+            <option *ngFor="let e of employees" [value]="e.id" [disabled]="e.id === 'h1'">
+              {{ e.name }} ({{ e.title }}) {{ e.id === 'h1' ? '— Founder (Root)' : '' }}
+            </option>
+          </select>
+        </div>
+
+        <div class="formgroup">
+          <label>Quản lý trực tiếp mới (Direct Manager)</label>
+          <select [(ngModel)]="reassignManagerId" name="reassignManagerId" class="select">
+            <option [ngValue]="null">-- Không có / Báo cáo Hội đồng (Root) --</option>
+            <option *ngFor="let m of getValidManagersFor(reassignEmployeeId)" [value]="m.id">
+              {{ m.name }} · {{ m.title }} ({{ m.role }})
+            </option>
+          </select>
+          <div class="tiny muted" style="margin-top:4px">
+            * Chỉ hiển thị những nhân sự hợp lệ (đã lọc bỏ cấp dưới để chống chu trình lặp).
+          </div>
+        </div>
+
+        <div class="alert danger" *ngIf="reassignError" style="margin-top:12px; padding: 8px 12px; background: rgba(239, 68, 68, 0.15); border: 1px solid var(--red); border-radius: 6px; color: var(--red); font-size: 13px;">
+          ⚠️ {{ reassignError }}
+        </div>
+
+        <div class="note" style="margin-top: 14px;">
+          <b>Cơ chế Realtime:</b> Sau khi xác nhận, toàn bộ các client đang theo dõi Sơ đồ tổ chức sẽ tự động cập nhật lại nhánh cây phân cấp qua luồng sự kiện SSE mà không cần tải lại trang.
+        </div>
+
+        <div class="actions" style="margin-top: 20px; display: flex; justify-content: flex-end; gap: 8px;">
+          <button type="button" class="btn" (click)="showReassignModal = false">Đóng</button>
+          <button type="submit" class="btn primary">Xác nhận chuyển đổi</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- DEPARTMENTS & TEAMS MANAGEMENT MODAL -->
+  <div class="modal-layer modal-center" *ngIf="showDeptTeamModal" (click)="showDeptTeamModal = false">
+    <div class="dialog" (click)="$event.stopPropagation()" style="max-width: 650px;">
+      <div class="card-title">🏢 Quản lý Cơ cấu Tổ chức: Phòng/Ban & Teams</div>
+      <p class="section-sub" style="margin-top: 6px;">
+        Quản trị các đơn vị chức năng nghiệp vụ (Departments) và các đội nhóm linh hoạt (Teams).
+      </p>
+
+      <div class="subtabs" style="margin-top: 14px; display: flex; gap: 8px; border-bottom: 1px solid var(--border); padding-bottom: 8px;">
+        <button type="button" class="btn mini" [class.primary]="activeDeptTeamTab === 'depts'" (click)="activeDeptTeamTab = 'depts'">
+          Phòng/Ban ({{ departments.length }})
+        </button>
+        <button type="button" class="btn mini" [class.primary]="activeDeptTeamTab === 'teams'" (click)="activeDeptTeamTab = 'teams'">
+          Teams trực thuộc ({{ teams.length }})
+        </button>
+      </div>
+
+      <!-- Tab Departments -->
+      <div *ngIf="activeDeptTeamTab === 'depts'" style="margin-top: 14px;">
+        <div class="row" style="gap:8px; margin-bottom:12px;">
+          <input [(ngModel)]="deptForm.name" class="input" placeholder="Tên phòng ban mới (ví dụ: Marketing, Pháp chế...)" style="flex:1" />
+          <button class="btn primary" (click)="saveDepartment()">{{ isEditingDept ? 'Lưu' : '＋ Tạo Phòng' }}</button>
+          <button class="btn" *ngIf="isEditingDept" (click)="cancelEditDept()">Hủy</button>
+        </div>
+
+        <div class="tablewrap" style="max-height: 280px; overflow-y: auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>Mã</th>
+                <th>Tên Phòng/Ban</th>
+                <th style="width:120px">Thao tác</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let d of departments">
+                <td class="font-mono">{{ d.id }}</td>
+                <td><b>{{ d.name }}</b></td>
+                <td>
+                  <div class="flex">
+                    <button class="btn mini" (click)="isEditingDept = true; deptForm = { id: d.id, name: d.name }">✏️ Sửa</button>
+                    <button class="btn mini danger" (click)="deleteDepartment(d.id)">🗑️</button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Tab Teams -->
+      <div *ngIf="activeDeptTeamTab === 'teams'" style="margin-top: 14px;">
+        <div class="grid cols-2" style="gap:8px; margin-bottom:12px;">
+          <input [(ngModel)]="teamForm.name" class="input" placeholder="Tên Team (ví dụ: Frontend, Data...)" />
+          <div class="flex" style="gap:6px">
+            <select [(ngModel)]="teamForm.departmentId" class="select" style="flex:1">
+              <option *ngFor="let d of departments" [value]="d.id">{{ d.name }}</option>
+            </select>
+            <button class="btn primary" (click)="saveTeam()">{{ isEditingTeam ? 'Lưu' : '＋ Tạo' }}</button>
+            <button class="btn" *ngIf="isEditingTeam" (click)="cancelEditTeam()">Hủy</button>
+          </div>
+        </div>
+
+        <div class="tablewrap" style="max-height: 280px; overflow-y: auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>Mã</th>
+                <th>Tên Team</th>
+                <th>Phòng ban</th>
+                <th style="width:120px">Thao tác</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let t of teams">
+                <td class="font-mono">{{ t.id }}</td>
+                <td><b>{{ t.name }}</b></td>
+                <td>{{ getDepartmentName(t.departmentId) }}</td>
+                <td>
+                  <div class="flex">
+                    <button class="btn mini" (click)="isEditingTeam = true; teamForm = { id: t.id, name: t.name, departmentId: t.departmentId }">✏️ Sửa</button>
+                    <button class="btn mini danger" (click)="deleteTeam(t.id)">🗑️</button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="actions" style="margin-top: 20px; display: flex; justify-content: flex-end;">
+        <button type="button" class="btn" (click)="showDeptTeamModal = false">Đóng</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- EMPLOYEE / WORKFORCE CRUD MODAL -->
+  <div class="modal-layer modal-center" *ngIf="showEmployeeModal" (click)="showEmployeeModal = false">
+    <div class="dialog" (click)="$event.stopPropagation()" style="max-width: 620px;">
+      <div class="card-title">{{ isEditingEmployee ? 'Chỉnh sửa Hồ sơ Nhân sự / Agent' : 'Thêm Nhân sự / AI Agent mới' }}</div>
+      <p class="section-sub" style="margin-top: 6px;">
+        Quản trị thông tin nhân sự, vị trí vai trò, mô hình LLM, hạn mức ngân sách và cấp quyền MCP.
+      </p>
+
+      <div class="subtabs" style="margin-top: 14px; display: flex; gap: 8px; border-bottom: 1px solid var(--border); padding-bottom: 8px;">
+        <button type="button" class="btn mini" [class.primary]="employeeModalTab === 'basic'" (click)="employeeModalTab = 'basic'">
+          1. Thông tin cơ bản
+        </button>
+        <button type="button" class="btn mini" [class.primary]="employeeModalTab === 'model_budget'" (click)="employeeModalTab = 'model_budget'">
+          2. Model & Ngân sách
+        </button>
+        <button type="button" class="btn mini" [class.primary]="employeeModalTab === 'mcp_skills'" (click)="employeeModalTab = 'mcp_skills'">
+          3. MCP Grants & Skills
+        </button>
+      </div>
+
+      <form (ngSubmit)="saveEmployee()" style="margin-top: 16px;">
+        <!-- Tab 1: Basic -->
+        <div *ngIf="employeeModalTab === 'basic'">
+          <div class="grid cols-2">
+            <div class="formgroup">
+              <label>Họ tên hiển thị</label>
+              <input [(ngModel)]="employeeForm.displayName" name="displayName" class="input" placeholder="Ví dụ: Alex Automation..." required />
+            </div>
+            <div class="formgroup">
+              <label>Loại nhân sự</label>
+              <select [(ngModel)]="employeeForm.kind" name="kind" class="select">
+                <option value="AI">◈ AI Agent</option>
+                <option value="HUMAN">◉ Con người (Human)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="grid cols-2">
+            <div class="formgroup">
+              <label>Chức danh (Title)</label>
+              <input [(ngModel)]="employeeForm.title" name="title" class="input" placeholder="Ví dụ: Cloud Architect..." required />
+            </div>
+            <div class="formgroup">
+              <label>Vai trò hệ thống (Role)</label>
+              <input [(ngModel)]="employeeForm.role" name="role" class="input" placeholder="Ví dụ: Engineer, Researcher..." required />
+            </div>
+          </div>
+
+          <div class="grid cols-2">
+            <div class="formgroup">
+              <label>Phòng ban trực thuộc</label>
+              <select [(ngModel)]="employeeForm.departmentId" name="departmentId" class="select">
+                <option *ngFor="let d of departments" [value]="d.id">{{ d.name }}</option>
+              </select>
+            </div>
+            <div class="formgroup">
+              <label>Quản lý trực tiếp (Manager)</label>
+              <select [(ngModel)]="employeeForm.managerId" name="managerId" class="select">
+                <option *ngFor="let m of employees" [value]="m.id">{{ m.name }} ({{ m.role }})</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 2: Model & Budget -->
+        <div *ngIf="employeeModalTab === 'model_budget'">
+          <div class="grid cols-2">
+            <div class="formgroup">
+              <label>Nhà cung cấp (Provider)</label>
+              <select [(ngModel)]="employeeForm.provider" name="provider" class="select">
+                <option value="Provider A">Provider A</option>
+                <option value="Provider B">Provider B</option>
+                <option value="Anthropic">Anthropic</option>
+                <option value="OpenAI">OpenAI</option>
+                <option value="Google Gemini">Google Gemini</option>
+                <option value="Ollama">Ollama Local</option>
+                <option value="-">- (Human / None)</option>
+              </select>
+            </div>
+            <div class="formgroup">
+              <label>Mô hình chỉ định (Model)</label>
+              <input [(ngModel)]="employeeForm.model" name="model" class="input" placeholder="Model X, Claude 3.5 Sonnet..." />
+            </div>
+          </div>
+
+          <div class="grid cols-2">
+            <div class="formgroup">
+              <label>Hạn mức ngân sách tháng (USD/Tháng)</label>
+              <input type="number" [(ngModel)]="employeeForm.budget" name="budget" class="input" min="0" step="5" />
+            </div>
+            <div class="formgroup">
+              <label>Điểm KPI chuẩn (%)</label>
+              <input type="number" [(ngModel)]="employeeForm.kpi" name="kpi" class="input" min="0" max="100" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 3: MCP & Skills -->
+        <div *ngIf="employeeModalTab === 'mcp_skills'">
+          <div class="formgroup">
+            <label>Phân quyền công cụ MCP (Agent Grants)</label>
+            <div class="grid cols-2" style="gap:8px; margin-top:6px">
+              <div *ngFor="let mcp of mcpServers" 
+                   class="tool-checkbox-item" 
+                   [class.selected]="isMCPGranted(mcp.name)"
+                   (click)="toggleMCPGrant(mcp.name)"
+                   style="cursor:pointer; display:flex; gap:8px; padding:8px; border:1px solid var(--border); border-radius:6px; background:var(--bg);">
+                <input type="checkbox" [checked]="isMCPGranted(mcp.name)" (click)="$event.stopPropagation()" (change)="toggleMCPGrant(mcp.name)" />
+                <div>
+                  <b class="font-mono">{{ mcp.name }}</b>
+                  <div class="tiny muted">{{ mcp.risk }} · {{ mcp.description }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="formgroup" style="margin-top:14px">
+            <label>Kỹ năng quy trình (Skills - phân tách dấu phẩy)</label>
+            <input [(ngModel)]="employeeForm.skillsText" name="skillsText" class="input" placeholder="Automation, Code Review, Testing..." />
+          </div>
+        </div>
+
+        <div class="actions" style="margin-top: 20px; display: flex; justify-content: flex-end; gap: 8px;">
+          <button type="button" class="btn" (click)="showEmployeeModal = false">Hủy</button>
+          <button type="submit" class="btn primary">{{ isEditingEmployee ? 'Lưu thay đổi' : 'Tạo nhân sự' }}</button>
+        </div>
+      </form>
     </div>
   </div>
 

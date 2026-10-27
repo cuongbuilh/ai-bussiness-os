@@ -8,7 +8,15 @@ import (
 type Repository interface {
 	// Organization & Departments & Teams
 	GetDepartments(ctx context.Context) ([]domain.Department, error)
+	CreateDepartment(ctx context.Context, d *domain.Department) error
+	UpdateDepartment(ctx context.Context, d *domain.Department) error
+	DeleteDepartment(ctx context.Context, id string) error
+
 	GetTeams(ctx context.Context) ([]domain.Team, error)
+	CreateTeam(ctx context.Context, t *domain.Team) error
+	UpdateTeam(ctx context.Context, t *domain.Team) error
+	DeleteTeam(ctx context.Context, id string) error
+
 	GetPositions(ctx context.Context) ([]domain.Position, error)
 	GetOrgTree(ctx context.Context) (*domain.OrgNode, error)
 
@@ -17,12 +25,15 @@ type Repository interface {
 	GetEmployeeByID(ctx context.Context, id string) (*domain.Employee, error)
 	CreateEmployee(ctx context.Context, emp *domain.Employee) error
 	UpdateEmployee(ctx context.Context, emp *domain.Employee) error
+	DeleteEmployee(ctx context.Context, id string) error
+	UpdateReportingLine(ctx context.Context, employeeID string, managerID *string) error
 
 	// Projects
 	GetProjects(ctx context.Context) ([]domain.Project, error)
 	GetProjectByID(ctx context.Context, id string) (*domain.Project, error)
 	CreateProject(ctx context.Context, p *domain.Project) error
 	UpdateProject(ctx context.Context, p *domain.Project) error
+	DeleteProject(ctx context.Context, id string) error
 
 	// Tasks
 	GetTasks(ctx context.Context, scope, projectFilter, ownerFilter, statusFilter, search string) ([]domain.Task, error)
@@ -43,7 +54,14 @@ type Repository interface {
 
 	// Capabilities & Models
 	GetMCPServers(ctx context.Context) ([]domain.MCPServer, error)
+	CreateMCPServer(ctx context.Context, s *domain.MCPServer) error
+	UpdateMCPServer(ctx context.Context, s *domain.MCPServer) error
+	DeleteMCPServer(ctx context.Context, id string) error
+
 	GetModels(ctx context.Context) ([]domain.ModelInfo, error)
+	CreateModel(ctx context.Context, m *domain.ModelInfo) error
+	UpdateModel(ctx context.Context, m *domain.ModelInfo) error
+	DeleteModel(ctx context.Context, id string) error
 
 	// Metrics
 	GetBoardSummary(ctx context.Context, scope string) (*domain.BoardSummary, error)

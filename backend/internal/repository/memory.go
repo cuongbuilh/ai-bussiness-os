@@ -756,3 +756,194 @@ func (r *MemoryRepo) RecordUsageLedger(ctx context.Context, entry *domain.UsageL
 	r.usageLedger = append(r.usageLedger, *entry)
 	return nil
 }
+
+// ----------------- Organization, Department & Team Management -----------------
+
+func (r *MemoryRepo) CreateDepartment(ctx context.Context, d *domain.Department) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if d.ID == "" {
+		d.ID = strings.ToLower(strings.ReplaceAll(d.Name, " ", "-"))
+	}
+	if d.OrganizationID == "" {
+		d.OrganizationID = "org-default"
+	}
+	d.CreatedAt = time.Now()
+	r.departments[d.ID] = *d
+	return nil
+}
+
+func (r *MemoryRepo) UpdateDepartment(ctx context.Context, d *domain.Department) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if existing, ok := r.departments[d.ID]; ok {
+		existing.Name = d.Name
+		existing.ParentDepartmentID = d.ParentDepartmentID
+		r.departments[d.ID] = existing
+		return nil
+	}
+	return fmt.Errorf("department %s not found", d.ID)
+}
+
+func (r *MemoryRepo) DeleteDepartment(ctx context.Context, id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.departments, id)
+	return nil
+}
+
+func (r *MemoryRepo) CreateTeam(ctx context.Context, t *domain.Team) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if t.ID == "" {
+		t.ID = strings.ToLower(strings.ReplaceAll(t.Name, " ", "-"))
+	}
+	if t.OrganizationID == "" {
+		t.OrganizationID = "org-default"
+	}
+	t.CreatedAt = time.Now()
+	r.teams[t.ID] = *t
+	return nil
+}
+
+func (r *MemoryRepo) UpdateTeam(ctx context.Context, t *domain.Team) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if existing, ok := r.teams[t.ID]; ok {
+		existing.Name = t.Name
+		existing.DepartmentID = t.DepartmentID
+		existing.LeadEmployeeID = t.LeadEmployeeID
+		r.teams[t.ID] = existing
+		return nil
+	}
+	return fmt.Errorf("team %s not found", t.ID)
+}
+
+func (r *MemoryRepo) DeleteTeam(ctx context.Context, id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.teams, id)
+	return nil
+}
+
+// ----------------- Employee & Hierarchy Management -----------------
+
+func (r *MemoryRepo) DeleteEmployee(ctx context.Context, id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if emp, ok := r.employees[id]; ok {
+		emp.State = domain.EmployeeStateRetired
+		r.employees[id] = emp
+		return nil
+	}
+	return fmt.Errorf("employee %s not found", id)
+}
+
+func (r *MemoryRepo) UpdateReportingLine(ctx context.Context, employeeID string, managerID *string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if emp, ok := r.employees[employeeID]; ok {
+		emp.ManagerID = managerID
+		emp.Version++
+		r.employees[employeeID] = emp
+		return nil
+	}
+	return fmt.Errorf("employee %s not found", employeeID)
+}
+
+// ----------------- Project Management -----------------
+
+func (r *MemoryRepo) DeleteProject(ctx context.Context, id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	// If tasks exist, set ARCHIVED
+	for _, t := range r.tasks {
+		if t.ProjectID != nil && *t.ProjectID == id {
+			if p, ok := r.projects[id]; ok {
+				p.Status = "ARCHIVED"
+				r.projects[id] = p
+				return nil
+			}
+		}
+	}
+	delete(r.projects, id)
+	return nil
+}
+
+// ----------------- Capabilities (MCP & Models) Management -----------------
+
+func (r *MemoryRepo) CreateMCPServer(ctx context.Context, s *domain.MCPServer) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if s.ID == "" {
+		s.ID = "mcp-" + strings.ToLower(s.Name)
+	}
+	if s.OrganizationID == "" {
+		s.OrganizationID = "org-default"
+	}
+	if s.RiskTier == "" {
+		s.RiskTier = "R1"
+	}
+	if s.ReviewStatus == "" {
+		s.ReviewStatus = "APPROVED"
+	}
+	s.CreatedAt = time.Now()
+	r.mcpServers[s.ID] = *s
+	return nil
+}
+
+func (r *MemoryRepo) UpdateMCPServer(ctx context.Context, s *domain.MCPServer) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if existing, ok := r.mcpServers[s.ID]; ok {
+		existing.Name = s.Name
+		existing.Transport = s.Transport
+		existing.Description = s.Description
+		existing.RiskTier = s.RiskTier
+		existing.Enabled = s.Enabled
+		existing.ReviewStatus = s.ReviewStatus
+		r.mcpServers[s.ID] = existing
+		return nil
+	}
+	return fmt.Errorf("mcp server %s not found", s.ID)
+}
+
+func (r *MemoryRepo) DeleteMCPServer(ctx context.Context, id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.mcpServers, id)
+	return nil
+}
+
+func (r *MemoryRepo) CreateModel(ctx context.Context, m *domain.ModelInfo) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if m.ID == "" {
+		m.ID = fmt.Sprintf("model-%s-%s", strings.ToLower(m.ProviderCode), strings.ToLower(m.ModelID))
+	}
+	if m.Revision == "" {
+		m.Revision = "default"
+	}
+	if m.Status == "" {
+		m.Status = "ACTIVE"
+	}
+	r.models[m.ID] = *m
+	return nil
+}
+
+func (r *MemoryRepo) UpdateModel(ctx context.Context, m *domain.ModelInfo) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.models[m.ID]; ok {
+		r.models[m.ID] = *m
+		return nil
+	}
+	return fmt.Errorf("model %s not found", m.ID)
+}
+
+func (r *MemoryRepo) DeleteModel(ctx context.Context, id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.models, id)
+	return nil
+}

@@ -717,3 +717,302 @@ func (h *Handler) GetModels(w http.ResponseWriter, r *http.Request) {
 	}
 	h.writeJSON(w, http.StatusOK, models)
 }
+
+// ----------------- CRUD Capabilities: MCP Servers -----------------
+
+func (h *Handler) CreateMCPServer(w http.ResponseWriter, r *http.Request) {
+	if _, err := h.authenticate(r); err != nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized: "+err.Error())
+		return
+	}
+	var s domain.MCPServer
+	if err := json.NewDecoder(r.Body).Decode(&s); err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid json body: "+err.Error())
+		return
+	}
+	if err := h.svc.CreateMCPServer(r.Context(), &s); err != nil {
+		h.writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	h.writeJSON(w, http.StatusCreated, s)
+}
+
+func (h *Handler) UpdateMCPServer(w http.ResponseWriter, r *http.Request) {
+	if _, err := h.authenticate(r); err != nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized: "+err.Error())
+		return
+	}
+	id := chi.URLParam(r, "id")
+	var s domain.MCPServer
+	if err := json.NewDecoder(r.Body).Decode(&s); err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid json body: "+err.Error())
+		return
+	}
+	s.ID = id
+	if err := h.svc.UpdateMCPServer(r.Context(), &s); err != nil {
+		h.writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	h.writeJSON(w, http.StatusOK, s)
+}
+
+func (h *Handler) DeleteMCPServer(w http.ResponseWriter, r *http.Request) {
+	if _, err := h.authenticate(r); err != nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized: "+err.Error())
+		return
+	}
+	id := chi.URLParam(r, "id")
+	if err := h.svc.DeleteMCPServer(r.Context(), id); err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	h.writeJSON(w, http.StatusOK, map[string]string{"message": "deleted successfully", "id": id})
+}
+
+// ----------------- CRUD Capabilities: Models -----------------
+
+func (h *Handler) CreateModel(w http.ResponseWriter, r *http.Request) {
+	if _, err := h.authenticate(r); err != nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized: "+err.Error())
+		return
+	}
+	var m domain.ModelInfo
+	if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid json body: "+err.Error())
+		return
+	}
+	if err := h.svc.CreateModel(r.Context(), &m); err != nil {
+		h.writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	h.writeJSON(w, http.StatusCreated, m)
+}
+
+func (h *Handler) UpdateModel(w http.ResponseWriter, r *http.Request) {
+	if _, err := h.authenticate(r); err != nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized: "+err.Error())
+		return
+	}
+	id := chi.URLParam(r, "id")
+	var m domain.ModelInfo
+	if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid json body: "+err.Error())
+		return
+	}
+	m.ID = id
+	if err := h.svc.UpdateModel(r.Context(), &m); err != nil {
+		h.writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	h.writeJSON(w, http.StatusOK, m)
+}
+
+func (h *Handler) DeleteModel(w http.ResponseWriter, r *http.Request) {
+	if _, err := h.authenticate(r); err != nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized: "+err.Error())
+		return
+	}
+	id := chi.URLParam(r, "id")
+	if err := h.svc.DeleteModel(r.Context(), id); err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	h.writeJSON(w, http.StatusOK, map[string]string{"message": "deleted successfully", "id": id})
+}
+
+// ----------------- CRUD Projects (Update / Delete) -----------------
+
+func (h *Handler) UpdateProject(w http.ResponseWriter, r *http.Request) {
+	if _, err := h.authenticate(r); err != nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized: "+err.Error())
+		return
+	}
+	id := chi.URLParam(r, "projectId")
+	var p domain.Project
+	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid json body: "+err.Error())
+		return
+	}
+	p.ID = id
+	if err := h.svc.UpdateProject(r.Context(), &p); err != nil {
+		h.writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	h.writeJSON(w, http.StatusOK, p)
+}
+
+func (h *Handler) DeleteProject(w http.ResponseWriter, r *http.Request) {
+	if _, err := h.authenticate(r); err != nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized: "+err.Error())
+		return
+	}
+	id := chi.URLParam(r, "projectId")
+	if err := h.svc.DeleteProject(r.Context(), id); err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	h.writeJSON(w, http.StatusOK, map[string]string{"message": "project deleted/archived successfully", "id": id})
+}
+
+// ----------------- CRUD Employees & Hierarchy Management -----------------
+
+func (h *Handler) UpdateEmployee(w http.ResponseWriter, r *http.Request) {
+	if _, err := h.authenticate(r); err != nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized: "+err.Error())
+		return
+	}
+	id := chi.URLParam(r, "employeeId")
+	var emp domain.Employee
+	if err := json.NewDecoder(r.Body).Decode(&emp); err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid json body: "+err.Error())
+		return
+	}
+	emp.ID = id
+	if err := h.svc.UpdateEmployee(r.Context(), &emp); err != nil {
+		h.writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	h.writeJSON(w, http.StatusOK, emp)
+}
+
+func (h *Handler) DeleteEmployee(w http.ResponseWriter, r *http.Request) {
+	if _, err := h.authenticate(r); err != nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized: "+err.Error())
+		return
+	}
+	id := chi.URLParam(r, "employeeId")
+	if err := h.svc.DeleteEmployee(r.Context(), id); err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	h.writeJSON(w, http.StatusOK, map[string]string{"message": "employee deactivated successfully", "id": id})
+}
+
+func (h *Handler) UpdateReportingLine(w http.ResponseWriter, r *http.Request) {
+	if _, err := h.authenticate(r); err != nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized: "+err.Error())
+		return
+	}
+	id := chi.URLParam(r, "employeeId")
+	var req struct {
+		ManagerID *string `json:"managerId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid json body: "+err.Error())
+		return
+	}
+
+	if err := h.svc.UpdateReportingLine(r.Context(), id, req.ManagerID); err != nil {
+		if strings.Contains(err.Error(), "BR-ORG-002") {
+			h.writeError(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
+		h.writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	h.writeJSON(w, http.StatusOK, map[string]interface{}{
+		"message":    "reporting line updated successfully",
+		"employeeId": id,
+		"managerId":  req.ManagerID,
+	})
+}
+
+// ----------------- CRUD Departments & Teams -----------------
+
+func (h *Handler) CreateDepartment(w http.ResponseWriter, r *http.Request) {
+	if _, err := h.authenticate(r); err != nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized: "+err.Error())
+		return
+	}
+	var d domain.Department
+	if err := json.NewDecoder(r.Body).Decode(&d); err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid json body: "+err.Error())
+		return
+	}
+	if err := h.svc.CreateDepartment(r.Context(), &d); err != nil {
+		h.writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	h.writeJSON(w, http.StatusCreated, d)
+}
+
+func (h *Handler) UpdateDepartment(w http.ResponseWriter, r *http.Request) {
+	if _, err := h.authenticate(r); err != nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized: "+err.Error())
+		return
+	}
+	id := chi.URLParam(r, "id")
+	var d domain.Department
+	if err := json.NewDecoder(r.Body).Decode(&d); err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid json body: "+err.Error())
+		return
+	}
+	d.ID = id
+	if err := h.svc.UpdateDepartment(r.Context(), &d); err != nil {
+		h.writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	h.writeJSON(w, http.StatusOK, d)
+}
+
+func (h *Handler) DeleteDepartment(w http.ResponseWriter, r *http.Request) {
+	if _, err := h.authenticate(r); err != nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized: "+err.Error())
+		return
+	}
+	id := chi.URLParam(r, "id")
+	if err := h.svc.DeleteDepartment(r.Context(), id); err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	h.writeJSON(w, http.StatusOK, map[string]string{"message": "department deleted successfully", "id": id})
+}
+
+func (h *Handler) CreateTeam(w http.ResponseWriter, r *http.Request) {
+	if _, err := h.authenticate(r); err != nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized: "+err.Error())
+		return
+	}
+	var t domain.Team
+	if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid json body: "+err.Error())
+		return
+	}
+	if err := h.svc.CreateTeam(r.Context(), &t); err != nil {
+		h.writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	h.writeJSON(w, http.StatusCreated, t)
+}
+
+func (h *Handler) UpdateTeam(w http.ResponseWriter, r *http.Request) {
+	if _, err := h.authenticate(r); err != nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized: "+err.Error())
+		return
+	}
+	id := chi.URLParam(r, "id")
+	var t domain.Team
+	if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
+		h.writeError(w, http.StatusBadRequest, "invalid json body: "+err.Error())
+		return
+	}
+	t.ID = id
+	if err := h.svc.UpdateTeam(r.Context(), &t); err != nil {
+		h.writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	h.writeJSON(w, http.StatusOK, t)
+}
+
+func (h *Handler) DeleteTeam(w http.ResponseWriter, r *http.Request) {
+	if _, err := h.authenticate(r); err != nil {
+		h.writeError(w, http.StatusUnauthorized, "unauthorized: "+err.Error())
+		return
+	}
+	id := chi.URLParam(r, "id")
+	if err := h.svc.DeleteTeam(r.Context(), id); err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	h.writeJSON(w, http.StatusOK, map[string]string{"message": "team deleted successfully", "id": id})
+}

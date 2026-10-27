@@ -169,7 +169,7 @@ export class ApiService {
     }
   }
 
-  // ---------------- Organization ----------------
+  // ---------------- Organization, Departments & Teams ----------------
   getOrgChart(): Observable<OrgNode> {
     return this.http.get<OrgNode>(`${this.baseUrl}/organization/org-chart`, { headers: this.headers });
   }
@@ -178,15 +178,39 @@ export class ApiService {
     return this.http.get<Department[]>(`${this.baseUrl}/departments`, { headers: this.headers });
   }
 
+  createDepartment(dept: Partial<Department>): Observable<Department> {
+    return this.http.post<Department>(`${this.baseUrl}/departments`, dept, { headers: this.headers });
+  }
+
+  updateDepartment(id: string, dept: Partial<Department>): Observable<Department> {
+    return this.http.patch<Department>(`${this.baseUrl}/departments/${id}`, dept, { headers: this.headers });
+  }
+
+  deleteDepartment(id: string): Observable<any> {
+    return this.http.delete(`${this.baseUrl}/departments/${id}`, { headers: this.headers });
+  }
+
   getTeams(): Observable<Team[]> {
     return this.http.get<Team[]>(`${this.baseUrl}/teams`, { headers: this.headers });
+  }
+
+  createTeam(team: Partial<Team>): Observable<Team> {
+    return this.http.post<Team>(`${this.baseUrl}/teams`, team, { headers: this.headers });
+  }
+
+  updateTeam(id: string, team: Partial<Team>): Observable<Team> {
+    return this.http.patch<Team>(`${this.baseUrl}/teams/${id}`, team, { headers: this.headers });
+  }
+
+  deleteTeam(id: string): Observable<any> {
+    return this.http.delete(`${this.baseUrl}/teams/${id}`, { headers: this.headers });
   }
 
   getPositions(): Observable<Position[]> {
     return this.http.get<Position[]>(`${this.baseUrl}/positions`, { headers: this.headers });
   }
 
-  // ---------------- Employees ----------------
+  // ---------------- Employees & Hierarchy ----------------
   getEmployees(): Observable<Employee[]> {
     return this.http.get<Employee[]>(`${this.baseUrl}/employees`, { headers: this.headers });
   }
@@ -197,6 +221,18 @@ export class ApiService {
 
   createEmployee(emp: Partial<Employee>): Observable<Employee> {
     return this.http.post<Employee>(`${this.baseUrl}/employees`, emp, { headers: this.headers });
+  }
+
+  updateEmployee(id: string, emp: Partial<Employee>): Observable<Employee> {
+    return this.http.patch<Employee>(`${this.baseUrl}/employees/${id}`, emp, { headers: this.headers });
+  }
+
+  deleteEmployee(id: string): Observable<any> {
+    return this.http.delete(`${this.baseUrl}/employees/${id}`, { headers: this.headers });
+  }
+
+  updateReportingLine(employeeId: string, managerId: string | null): Observable<any> {
+    return this.http.patch(`${this.baseUrl}/employees/${employeeId}/reporting-line`, { managerId }, { headers: this.headers });
   }
 
   getEmployeeCapabilities(id: string): Observable<any> {
@@ -214,6 +250,14 @@ export class ApiService {
 
   createProject(proj: Partial<Project>): Observable<Project> {
     return this.http.post<Project>(`${this.baseUrl}/projects`, proj, { headers: this.headers });
+  }
+
+  updateProject(id: string, proj: Partial<Project>): Observable<Project> {
+    return this.http.patch<Project>(`${this.baseUrl}/projects/${id}`, proj, { headers: this.headers });
+  }
+
+  deleteProject(id: string): Observable<any> {
+    return this.http.delete(`${this.baseUrl}/projects/${id}`, { headers: this.headers });
   }
 
   // ---------------- Tasks ----------------
@@ -281,7 +325,31 @@ export class ApiService {
     return this.http.get<MCPServer[]>(`${this.baseUrl}/capabilities/mcp-servers`, { headers: this.headers });
   }
 
+  createMCPServer(server: Partial<MCPServer>): Observable<MCPServer> {
+    return this.http.post<MCPServer>(`${this.baseUrl}/capabilities/mcp-servers`, server, { headers: this.headers });
+  }
+
+  updateMCPServer(id: string, server: Partial<MCPServer>): Observable<MCPServer> {
+    return this.http.patch<MCPServer>(`${this.baseUrl}/capabilities/mcp-servers/${id}`, server, { headers: this.headers });
+  }
+
+  deleteMCPServer(id: string): Observable<any> {
+    return this.http.delete(`${this.baseUrl}/capabilities/mcp-servers/${id}`, { headers: this.headers });
+  }
+
   getModels(): Observable<ModelInfo[]> {
     return this.http.get<ModelInfo[]>(`${this.baseUrl}/capabilities/models`, { headers: this.headers });
+  }
+
+  createModel(model: Partial<ModelInfo>): Observable<ModelInfo> {
+    return this.http.post<ModelInfo>(`${this.baseUrl}/capabilities/models`, model, { headers: this.headers });
+  }
+
+  updateModel(id: string, model: Partial<ModelInfo>): Observable<ModelInfo> {
+    return this.http.patch<ModelInfo>(`${this.baseUrl}/capabilities/models/${id}`, model, { headers: this.headers });
+  }
+
+  deleteModel(id: string): Observable<any> {
+    return this.http.delete(`${this.baseUrl}/capabilities/models/${id}`, { headers: this.headers });
   }
 }

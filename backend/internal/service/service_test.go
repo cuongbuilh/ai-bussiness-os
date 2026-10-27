@@ -163,3 +163,110 @@ func TestScopeFiltering(t *testing.T) {
 		}
 	}
 }
+
+func TestUpdateReportingLine_CycleDetection(t *testing.T) {
+	svc := setupTestServices()
+	ctx := context.Background()
+
+	// h1 is Founder (manager = nil)
+	// m1 reports to h1
+	// r1 reports to m1
+	// Attempt 1: Setting m1 to report to itself should fail BR-ORG-002
+	m1ID := "m1"
+	err := svc.UpdateReportingLine(ctx, "m1", &m1ID)
+	if err == nil {
+		t.Fatalf("expected error for self reporting, got nil")
+	}
+
+	// Attempt 2: Setting m1 to report to r1 (its subordinate) creates cycle r1 -> m1 -> r1!
+	subID := "r1"
+	err = svc.UpdateReportingLine(ctx, "m1", &subID)
+	if err == nil {
+		t.Fatalf("expected cycle detection error for m1 -> r1, got nil")
+	}
+
+	// Attempt 3: Setting r1 to report to m2 (valid peer manager) should succeed
+	m2ID := "m2"
+	err = svc.UpdateReportingLine(ctx, "r1", &m2ID)
+	if err != nil {
+		t.Fatalf("expected valid reassignment to succeed, got: %v", err)
+	}
+
+	emp, _ := svc.GetEmployeeDetail(ctx, "r1")
+	if emp.ManagerID == nil || *emp.ManagerID != "m2" {
+		t.Errorf("expected manager to be m2, got %v", emp.ManagerID)
+	}
+}
+
+func TestCapabilitiesAndEntitiesCRUD(t *testing.T) {
+	svc := setupTestServices()
+	ctx := context.Background()
+
+	// 1. Model CRUD
+	m := &domain.ModelInfo{
+		ID:           "model-custom-1",
+		ProviderCode: "Provider A",
+		ModelID:      "model-custom",
+		Revision:     "v1",
+		Features:     []string{"Tool Calling", "Vision"},
+		Status:       "ACTIVE",
+	}
+	if err := svc.CreateModel(ctx, m); err != nil {
+		t.Fatalf("failed to create model: %v", err)
+	}
+	m.Status = "DEPRECATED"
+	if err := svc.UpdateModel(ctx, m); err != nil {
+		t.Fatalf("failed to update model: %v", err)
+	}
+	if err := svc.DeleteModel(ctx, m.ID); err != nil {
+		t.Fatalf("failed to delete model: %v", err)
+	}
+
+	// 2. MCP Server CRUD
+	server := &domain.MCPServer{
+		ID:          "mcp-custom-test",
+		Name:        "custom-test-mcp",
+		Transport:   "stdio",
+		Description: "Testing MCP",
+		RiskTier:    "R2",
+		Enabled:     true,
+	}
+	if err := svc.CreateMCPServer(ctx, server); err != nil {
+		t.Fatalf("failed to create mcp server: %v", err)
+	}
+	server.Description = "Updated description"
+	if err := svc.UpdateMCPServer(ctx, server); err != nil {
+		t.Fatalf("failed to update mcp server: %v", err)
+	}
+	if err := svc.DeleteMCPServer(ctx, server.ID); err != nil {
+		t.Fatalf("failed to delete mcp server: %v", err)
+	}
+
+	// 3. Department & Team CRUD
+	dept := &domain.Department{
+		ID:   "dept-test",
+		Name: "Test Department",
+	}
+	if err := svc.CreateDepartment(ctx, dept); err != nil {
+		t.Fatalf("failed to create dept: %v", err)
+	}
+	dept.Name = "Test Department Updated"
+	if err := svc.UpdateDepartment(ctx, dept); err != nil {
+		t.Fatalf("failed to update dept: %v", err)
+	}
+
+	team := &domain.Team{
+		ID:           "team-test",
+		DepartmentID: dept.ID,
+		Name:         "Test Team",
+	}
+	if err := svc.CreateTeam(ctx, team); err != nil {
+		t.Fatalf("failed to create team: %v", err)
+	}
+	if err := svc.DeleteTeam(ctx, team.ID); err != nil {
+		t.Fatalf("failed to delete team: %v", err)
+	}
+	if err := svc.DeleteDepartment(ctx, dept.ID); err != nil {
+		t.Fatalf("failed to delete dept: %v", err)
+	}
+}

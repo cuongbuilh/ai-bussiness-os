@@ -977,3 +977,142 @@ func (r *PostgresRepo) RecordUsageLedger(ctx context.Context, entry *domain.Usag
 	return err
 }
 
+// ----------------- Organization, Department & Team Management -----------------
+
+func (r *PostgresRepo) CreateDepartment(ctx context.Context, d *domain.Department) error {
+	if d.ID == "" {
+		d.ID = strings.ToLower(strings.ReplaceAll(d.Name, " ", "-"))
+	}
+	if d.OrganizationID == "" {
+		d.OrganizationID = "org-default"
+	}
+	query := `INSERT INTO departments (id, organization_id, name, parent_department_id, created_at)
+	          VALUES ($1, $2, $3, $4, now())`
+	_, err := r.db.ExecContext(ctx, query, d.ID, d.OrganizationID, d.Name, d.ParentDepartmentID)
+	return err
+}
+
+func (r *PostgresRepo) UpdateDepartment(ctx context.Context, d *domain.Department) error {
+	query := `UPDATE departments SET name = $1, parent_department_id = $2 WHERE id = $3`
+	_, err := r.db.ExecContext(ctx, query, d.Name, d.ParentDepartmentID, d.ID)
+	return err
+}
+
+func (r *PostgresRepo) DeleteDepartment(ctx context.Context, id string) error {
+	_, err := r.db.ExecContext(ctx, `DELETE FROM departments WHERE id = $1`, id)
+	return err
+}
+
+func (r *PostgresRepo) CreateTeam(ctx context.Context, t *domain.Team) error {
+	if t.ID == "" {
+		t.ID = strings.ToLower(strings.ReplaceAll(t.Name, " ", "-"))
+	}
+	if t.OrganizationID == "" {
+		t.OrganizationID = "org-default"
+	}
+	query := `INSERT INTO teams (id, organization_id, department_id, name, lead_employee_id, created_at)
+	          VALUES ($1, $2, $3, $4, $5, now())`
+	_, err := r.db.ExecContext(ctx, query, t.ID, t.OrganizationID, t.DepartmentID, t.Name, t.LeadEmployeeID)
+	return err
+}
+
+func (r *PostgresRepo) UpdateTeam(ctx context.Context, t *domain.Team) error {
+	query := `UPDATE teams SET name = $1, department_id = $2, lead_employee_id = $3 WHERE id = $4`
+	_, err := r.db.ExecContext(ctx, query, t.Name, t.DepartmentID, t.LeadEmployeeID, t.ID)
+	return err
+}
+
+func (r *PostgresRepo) DeleteTeam(ctx context.Context, id string) error {
+	_, err := r.db.ExecContext(ctx, `DELETE FROM teams WHERE id = $1`, id)
+	return err
+}
+
+// ----------------- Employee & Hierarchy Management -----------------
+
+func (r *PostgresRepo) DeleteEmployee(ctx context.Context, id string) error {
+	// Soft delete/retire to preserve audit trail and references
+	query := `UPDATE employees SET state = 'RETIRED' WHERE id = $1`
+	_, err := r.db.ExecContext(ctx, query, id)
+	return err
+}
+
+func (r *PostgresRepo) UpdateReportingLine(ctx context.Context, employeeID string, managerID *string) error {
+	query := `UPDATE employees SET manager_id = $1, version = version + 1 WHERE id = $2`
+	_, err := r.db.ExecContext(ctx, query, managerID, employeeID)
+	return err
+}
+
+// ----------------- Project Management -----------------
+
+func (r *PostgresRepo) DeleteProject(ctx context.Context, id string) error {
+	var taskCount int
+	_ = r.db.QueryRowContext(ctx, `SELECT count(*) FROM tasks WHERE project_id = $1`, id).Scan(&taskCount)
+	if taskCount > 0 {
+		_, err := r.db.ExecContext(ctx, `UPDATE projects SET status = 'ARCHIVED' WHERE id = $1`, id)
+		return err
+	}
+	_, err := r.db.ExecContext(ctx, `DELETE FROM projects WHERE id = $1`, id)
+	return err
+}
+
+// ----------------- Capabilities (MCP & Models) Management -----------------
+
+func (r *PostgresRepo) CreateMCPServer(ctx context.Context, s *domain.MCPServer) error {
+	if s.ID == "" {
+		s.ID = "mcp-" + strings.ToLower(s.Name)
+	}
+	if s.OrganizationID == "" {
+		s.OrganizationID = "org-default"
+	}
+	if s.RiskTier == "" {
+		s.RiskTier = "R1"
+	}
+	if s.ReviewStatus == "" {
+		s.ReviewStatus = "APPROVED"
+	}
+	query := `INSERT INTO mcp_servers (id, organization_id, name, transport, description, risk_tier, enabled, review_status, created_at)
+	          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())`
+	_, err := r.db.ExecContext(ctx, query, s.ID, s.OrganizationID, s.Name, s.Transport, s.Description, s.RiskTier, s.Enabled, s.ReviewStatus)
+	return err
+}
+
+func (r *PostgresRepo) UpdateMCPServer(ctx context.Context, s *domain.MCPServer) error {
+	query := `UPDATE mcp_servers SET name = $1, transport = $2, description = $3, risk_tier = $4, enabled = $5, review_status = $6 WHERE id = $7`
+	_, err := r.db.ExecContext(ctx, query, s.Name, s.Transport, s.Description, s.RiskTier, s.Enabled, s.ReviewStatus, s.ID)
+	return err
+}
+
+func (r *PostgresRepo) DeleteMCPServer(ctx context.Context, id string) error {
+	_, err := r.db.ExecContext(ctx, `DELETE FROM mcp_servers WHERE id = $1`, id)
+	return err
+}
+
+func (r *PostgresRepo) CreateModel(ctx context.Context, m *domain.ModelInfo) error {
+	if m.ID == "" {
+		m.ID = fmt.Sprintf("model-%s-%s", strings.ToLower(m.ProviderCode), strings.ToLower(m.ModelID))
+	}
+	featJSON, _ := json.Marshal(m.Features)
+	if m.Revision == "" {
+		m.Revision = "default"
+	}
+	if m.Status == "" {
+		m.Status = "ACTIVE"
+	}
+	query := `INSERT INTO model_versions (id, provider_code, model_id, revision, features, status)
+	          VALUES ($1, $2, $3, $4, $5, $6)`
+	_, err := r.db.ExecContext(ctx, query, m.ID, m.ProviderCode, m.ModelID, m.Revision, featJSON, m.Status)
+	return err
+}
+
+func (r *PostgresRepo) UpdateModel(ctx context.Context, m *domain.ModelInfo) error {
+	featJSON, _ := json.Marshal(m.Features)
+	query := `UPDATE model_versions SET provider_code = $1, model_id = $2, revision = $3, features = $4, status = $5 WHERE id = $6`
+	_, err := r.db.ExecContext(ctx, query, m.ProviderCode, m.ModelID, m.Revision, featJSON, m.Status, m.ID)
+	return err
+}
+
+func (r *PostgresRepo) DeleteModel(ctx context.Context, id string) error {
+	_, err := r.db.ExecContext(ctx, `DELETE FROM model_versions WHERE id = $1`, id)
+	return err
+}
+

@@ -594,3 +594,242 @@ func (s *Services) GetModels(ctx context.Context) ([]domain.ModelInfo, error) {
 func (s *Services) GetBoardSummary(ctx context.Context, scope string) (*domain.BoardSummary, error) {
 	return s.Repo.GetBoardSummary(ctx, scope)
 }
+
+// ----------------- Organization, Department & Team Management -----------------
+
+func (s *Services) CreateDepartment(ctx context.Context, d *domain.Department) error {
+	if d.Name == "" {
+		return fmt.Errorf("department name is required")
+	}
+	if err := s.Repo.CreateDepartment(ctx, d); err != nil {
+		return err
+	}
+	s.Broker.Publish("department", "created", d)
+	return nil
+}
+
+func (s *Services) UpdateDepartment(ctx context.Context, d *domain.Department) error {
+	if d.ID == "" {
+		return fmt.Errorf("department ID is required")
+	}
+	if err := s.Repo.UpdateDepartment(ctx, d); err != nil {
+		return err
+	}
+	s.Broker.Publish("department", "updated", d)
+	return nil
+}
+
+func (s *Services) DeleteDepartment(ctx context.Context, id string) error {
+	if err := s.Repo.DeleteDepartment(ctx, id); err != nil {
+		return err
+	}
+	s.Broker.Publish("department", "deleted", map[string]string{"id": id})
+	return nil
+}
+
+func (s *Services) CreateTeam(ctx context.Context, t *domain.Team) error {
+	if t.Name == "" {
+		return fmt.Errorf("team name is required")
+	}
+	if err := s.Repo.CreateTeam(ctx, t); err != nil {
+		return err
+	}
+	s.Broker.Publish("team", "created", t)
+	return nil
+}
+
+func (s *Services) UpdateTeam(ctx context.Context, t *domain.Team) error {
+	if t.ID == "" {
+		return fmt.Errorf("team ID is required")
+	}
+	if err := s.Repo.UpdateTeam(ctx, t); err != nil {
+		return err
+	}
+	s.Broker.Publish("team", "updated", t)
+	return nil
+}
+
+func (s *Services) DeleteTeam(ctx context.Context, id string) error {
+	if err := s.Repo.DeleteTeam(ctx, id); err != nil {
+		return err
+	}
+	s.Broker.Publish("team", "deleted", map[string]string{"id": id})
+	return nil
+}
+
+// ----------------- Employee & Hierarchy Management -----------------
+
+func (s *Services) UpdateEmployee(ctx context.Context, emp *domain.Employee) error {
+	if emp.ID == "" {
+		return fmt.Errorf("employee ID is required")
+	}
+	if err := s.Repo.UpdateEmployee(ctx, emp); err != nil {
+		return err
+	}
+	s.Broker.Publish("employee", "updated", emp)
+	return nil
+}
+
+func (s *Services) DeleteEmployee(ctx context.Context, id string) error {
+	if err := s.Repo.DeleteEmployee(ctx, id); err != nil {
+		return err
+	}
+	s.Broker.Publish("employee", "deleted", map[string]string{"id": id})
+	return nil
+}
+
+func (s *Services) UpdateReportingLine(ctx context.Context, employeeID string, managerID *string) error {
+	if employeeID == "" {
+		return fmt.Errorf("employeeId cannot be empty")
+	}
+
+	emp, err := s.Repo.GetEmployeeByID(ctx, employeeID)
+	if err != nil || emp == nil {
+		return fmt.Errorf("employee %s not found", employeeID)
+	}
+
+	if managerID == nil || *managerID == "" {
+		// Clearing manager (e.g. root founder)
+		if err := s.Repo.UpdateReportingLine(ctx, employeeID, nil); err != nil {
+			return err
+		}
+		s.Broker.Publish("hierarchy", "reassigned", map[string]interface{}{
+			"employeeId": employeeID,
+			"managerId":  nil,
+		})
+		return nil
+	}
+
+	targetMgrID := *managerID
+	// BR-ORG-002: cannot manage themselves
+	if targetMgrID == employeeID {
+		return fmt.Errorf("BR-ORG-002 violation: employee cannot manage themselves")
+	}
+
+	// BR-ORG-001: manager must exist
+	targetMgr, err := s.Repo.GetEmployeeByID(ctx, targetMgrID)
+	if err != nil || targetMgr == nil {
+		return fmt.Errorf("BR-ORG-001 violation: manager %s does not exist", targetMgrID)
+	}
+
+	// Cycle detection: traverse up from targetMgrID to see if employeeID is an ancestor
+	employees, err := s.Repo.GetEmployees(ctx)
+	if err != nil {
+		return err
+	}
+	empMap := make(map[string]domain.Employee)
+	for _, e := range employees {
+		empMap[e.ID] = e
+	}
+
+	curr := targetMgrID
+	visited := make(map[string]bool)
+	for curr != "" {
+		if curr == employeeID {
+			return fmt.Errorf("BR-ORG-002 violation: circular reporting chain detected (%s is an ancestor of %s)", employeeID, targetMgrID)
+		}
+		if visited[curr] {
+			break
+		}
+		visited[curr] = true
+
+		m, exists := empMap[curr]
+		if !exists || m.ManagerID == nil {
+			break
+		}
+		curr = *m.ManagerID
+	}
+
+	if err := s.Repo.UpdateReportingLine(ctx, employeeID, managerID); err != nil {
+		return err
+	}
+
+	s.Broker.Publish("hierarchy", "reassigned", map[string]interface{}{
+		"employeeId": employeeID,
+		"managerId":  targetMgrID,
+	})
+	return nil
+}
+
+// ----------------- Project Management -----------------
+
+func (s *Services) UpdateProject(ctx context.Context, p *domain.Project) error {
+	if p.ID == "" {
+		return fmt.Errorf("project ID is required")
+	}
+	if err := s.Repo.UpdateProject(ctx, p); err != nil {
+		return err
+	}
+	s.Broker.Publish("project", "updated", p)
+	return nil
+}
+
+func (s *Services) DeleteProject(ctx context.Context, id string) error {
+	if err := s.Repo.DeleteProject(ctx, id); err != nil {
+		return err
+	}
+	s.Broker.Publish("project", "deleted", map[string]string{"id": id})
+	return nil
+}
+
+// ----------------- Capabilities (MCP & Models) Management -----------------
+
+func (s *Services) CreateMCPServer(ctx context.Context, server *domain.MCPServer) error {
+	if server.Name == "" {
+		return fmt.Errorf("mcp server name is required")
+	}
+	if err := s.Repo.CreateMCPServer(ctx, server); err != nil {
+		return err
+	}
+	s.Broker.Publish("mcp_server", "created", server)
+	return nil
+}
+
+func (s *Services) UpdateMCPServer(ctx context.Context, server *domain.MCPServer) error {
+	if server.ID == "" {
+		return fmt.Errorf("mcp server ID is required")
+	}
+	if err := s.Repo.UpdateMCPServer(ctx, server); err != nil {
+		return err
+	}
+	s.Broker.Publish("mcp_server", "updated", server)
+	return nil
+}
+
+func (s *Services) DeleteMCPServer(ctx context.Context, id string) error {
+	if err := s.Repo.DeleteMCPServer(ctx, id); err != nil {
+		return err
+	}
+	s.Broker.Publish("mcp_server", "deleted", map[string]string{"id": id})
+	return nil
+}
+
+func (s *Services) CreateModel(ctx context.Context, model *domain.ModelInfo) error {
+	if model.ProviderCode == "" || model.ModelID == "" {
+		return fmt.Errorf("provider and modelId are required")
+	}
+	if err := s.Repo.CreateModel(ctx, model); err != nil {
+		return err
+	}
+	s.Broker.Publish("model", "created", model)
+	return nil
+}
+
+func (s *Services) UpdateModel(ctx context.Context, model *domain.ModelInfo) error {
+	if model.ID == "" {
+		return fmt.Errorf("model ID is required")
+	}
+	if err := s.Repo.UpdateModel(ctx, model); err != nil {
+		return err
+	}
+	s.Broker.Publish("model", "updated", model)
+	return nil
+}
+
+func (s *Services) DeleteModel(ctx context.Context, id string) error {
+	if err := s.Repo.DeleteModel(ctx, id); err != nil {
+		return err
+	}
+	s.Broker.Publish("model", "deleted", map[string]string{"id": id})
+	return nil
+}

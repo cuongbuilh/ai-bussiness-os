@@ -96,13 +96,24 @@ func main() {
 		// Organization & Org Chart
 		r.Get("/organization/org-chart", h.GetOrgChart)
 		r.Get("/departments", h.GetDepartments)
+		r.Post("/departments", h.CreateDepartment)
+		r.Patch("/departments/{id}", h.UpdateDepartment)
+		r.Delete("/departments/{id}", h.DeleteDepartment)
+
 		r.Get("/teams", h.GetTeams)
+		r.Post("/teams", h.CreateTeam)
+		r.Patch("/teams/{id}", h.UpdateTeam)
+		r.Delete("/teams/{id}", h.DeleteTeam)
+
 		r.Get("/positions", h.GetPositions)
 
 		// Employees
 		r.Get("/employees", h.ListEmployees)
 		r.Post("/employees", h.CreateEmployee)
 		r.Get("/employees/{employeeId}", h.GetEmployeeDetail)
+		r.Patch("/employees/{employeeId}", h.UpdateEmployee)
+		r.Delete("/employees/{employeeId}", h.DeleteEmployee)
+		r.Patch("/employees/{employeeId}/reporting-line", h.UpdateReportingLine)
 		r.Get("/employees/{employeeId}/capabilities", h.GetEmployeeCapabilities)
 		r.Get("/employees/{employeeId}/executions", h.GetEmployeeExecutions)
 
@@ -110,6 +121,8 @@ func main() {
 		r.Get("/projects", h.ListProjects)
 		r.Post("/projects", h.CreateProject)
 		r.Get("/projects/{projectId}", h.GetProjectDetail)
+		r.Patch("/projects/{projectId}", h.UpdateProject)
+		r.Delete("/projects/{projectId}", h.DeleteProject)
 
 		// Tasks
 		r.Get("/tasks", h.ListTasks)
@@ -131,7 +144,14 @@ func main() {
 
 		// Capabilities
 		r.Get("/capabilities/mcp-servers", h.GetMCPServers)
+		r.Post("/capabilities/mcp-servers", h.CreateMCPServer)
+		r.Patch("/capabilities/mcp-servers/{id}", h.UpdateMCPServer)
+		r.Delete("/capabilities/mcp-servers/{id}", h.DeleteMCPServer)
+
 		r.Get("/capabilities/models", h.GetModels)
+		r.Post("/capabilities/models", h.CreateModel)
+		r.Patch("/capabilities/models/{id}", h.UpdateModel)
+		r.Delete("/capabilities/models/{id}", h.DeleteModel)
 	})
 
 	server := &http.Server{
